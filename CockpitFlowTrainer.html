@@ -1,0 +1,2920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cockpit Flow Trainer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/trix@2.0.0/dist/trix.css">
+    <script type="text/javascript" src="https://unpkg.com/trix@2.0.0/dist/trix.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #111827; --bg-secondary: #1f2937; --bg-tertiary: #374151;
+            --text-primary: #f3f4f6; --text-secondary: #9ca3af; --text-tertiary: #6b7281;
+            --border-color: #4b5563; --accent-color: #3b82f6;
+            --transition-speed: 0.3s;
+        }
+        html.light {
+            --bg-primary: #f9fafb; --bg-secondary: #ffffff; --bg-tertiary: #f3f4f6;
+            --text-primary: #1f2937; --text-secondary: #6b7281; --text-tertiary: #a1a1aa;
+            --border-color: #d1d5db; --accent-color: #3b82f6;
+        }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--bg-primary); 
+            color: var(--text-primary);
+            transition: background-color var(--transition-speed), color var(--transition-speed);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        .control-panel, .image-panel, input, select, textarea {
+            background-color: var(--bg-secondary);
+            transition: background-color var(--transition-speed), border-color var(--transition-speed);
+            color: var(--text-primary);
+        }
+        .flow-container-bg { background-color: #374151; }
+        .flow-step { background-color: #4b5563; }
+        .add-step-select { background-color: var(--bg-tertiary); border: 1px solid var(--border-color); }
+
+        html.light .flow-container-bg { background-color: var(--bg-tertiary); }
+        html.light .flow-step { background-color: #ffffff; border: 1px solid var(--border-color); }
+        html.light .add-step-select { background-color: #ffffff; border: 1px solid var(--border-color); }
+
+        .panel-item-inactive { color: var(--text-secondary) !important; background-color: var(--bg-tertiary) !important; }
+        html.light .panel-item-inactive { color: var(--text-secondary) !important; }
+        .panel-item-inactive:hover { background-color: var(--border-color) !important; }
+        .control-panel h2, .control-panel h3 { border-color: var(--border-color); }
+        input, select, textarea { background-color: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-primary); }
+        
+        #zoom-container { overflow: auto; width: 100%; height: 70vh; resize: vertical; cursor: default; }
+        #zoom-container.panning { cursor: grabbing; }
+        #image-container { position: relative; width: 100%; user-select: none; transform-origin: top left; transition: transform 0.1s linear; min-height: 300px; background-color: var(--bg-tertiary); border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; }
+        #image-container.edit-mode-active { cursor: crosshair; }
+        #cockpit-image { display: block; width: 100%; height: auto; }
+        .hotspot {
+            position: absolute; border: 1px solid #f87171; background-color: rgba(239, 68, 68, 0.2);
+            display: flex; align-items: center; justify-content: center; color: white;
+            text-shadow: 1px 1px 1px black; overflow: visible; box-sizing: border-box; border-radius: 2px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .hotspot-inner { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .hotspot.selected { border-width: 2px; border-color: var(--accent-color); }
+        .hotspot.editing { background-color: transparent; }
+        .delete-handle { position: absolute; top: -7px; right: -7px; width: 14px; height: 14px; background: #ef4444; color: white; cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 10px; border-radius: 50%; z-index: 12; transform: scale(0); transition: transform 0.2s; }
+        .hotspot.selected .delete-handle { display: flex; transform: scale(1); }
+        .hotspot.completed { background-color: rgba(16, 185, 129, 0.5); border-color: #10b981; }
+        .hotspot.error-flash { animation: red-flash 0.5s 1; }
+        @keyframes red-flash { 0%, 100% { background-color: rgba(239, 68, 68, 0.2); } 50% { background-color: rgba(239, 68, 68, 0.8); border-color: #ef4444;} }
+        
+        @keyframes green-flash { 0%, 100% { background-color: rgba(16, 185, 129, 0.5); } 50% { background-color: rgba(16, 185, 129, 0.9); border-color: #059669;} }
+        .hotspot.correct-flash { animation: green-flash 0.5s 1; }
+
+        @keyframes fade-out-slowly {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .hotspot.fading-out {
+            animation: fade-out-slowly 1s forwards;
+            pointer-events: none;
+        }
+
+        .resize-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: var(--accent-color);
+            border: 2px solid white;
+            z-index: 13;
+            display: none;
+        }
+        .hotspot.selected .resize-handle { display: block; }
+        .resize-handle.se {
+            bottom: -6px;
+            right: -6px;
+            cursor: se-resize;
+            border-radius: 50%;
+        }
+
+        #drop-zone { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            border: 2px dashed var(--border-color); border-radius: 0.5rem; 
+            transition: border-color 0.2s, background-color 0.2s; 
+            color: var(--text-secondary); 
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+        #drop-zone.active { display: flex; }
+        #drop-zone.drag-over { border-color: var(--accent-color); background-color: var(--bg-tertiary); }
+        #edit-mode-toggle .dot, #theme-toggle .dot { transition: transform 0.2s ease-in-out; }
+        #edit-mode-toggle input:checked ~ .dot, #theme-toggle input:checked ~ .dot { transform: translateX(1.5rem); }
+        #practice-overlay, #ai-setup-overlay { 
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.8); 
+            z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            opacity: 0; visibility: hidden; transition: opacity var(--transition-speed) ease-in-out, visibility var(--transition-speed); 
+        }
+        #practice-overlay.active, #ai-setup-overlay.active { opacity: 1; visibility: visible; }
+        #practice-container, #ai-setup-container { width: 100%; height: 100%; padding-top: 5rem; }
+        #practice-controls, #ai-setup-controls {
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%;
+            z-index: 60;
+            background-color: rgba(31, 41, 55, 0.8);
+            backdrop-filter: blur(5px);
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            color: #f3f4f6;
+        }
+        #practice-controls #trainer-ui, #ai-setup-controls #trainer-ui {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-grow: 1;
+        }
+        #practice-controls #message-box, #ai-setup-controls #message-box {
+            background: transparent;
+            border: none;
+            padding: 0;
+            text-align: center;
+            min-height: auto;
+            flex-grow: 1;
+        }
+        #practice-controls #mode-toggle-wrapper {
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+        #practice-controls #mode-toggle-wrapper span { color: #f3f4f6; }
+        #practice-controls #flow-select { background-color: #4b5563; }
+        #ai-setup-controls #ai-panel-selector { background-color: #4b5563; color: white; }
+        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; transition: opacity 0.3s; }
+        .modal-content { background-color: var(--bg-secondary); padding: 2rem; border-radius: 0.5rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); max-width: 90vw; width: 400px; }
+        .modal-hidden { display: none; }
+        .flow-step span { word-break: break-word; }
+        
+        .collapsible-container {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s ease-in-out;
+        }
+        .collapsible-container.expanded {
+            grid-template-rows: 1fr;
+        }
+        .collapsible-content {
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .fa-chevron-down { transition: transform 0.3s; }
+        .rotate-180 { transform: rotate(180deg); }
+        .hidden { display: none !important; }
+
+        /* Flow Editor Styles */
+        #flow-editor-overlay {
+            --grid-bg: var(--bg-tertiary);
+            --grid-border: var(--border-color);
+            --cell-bg: var(--bg-secondary);
+            --cell-hover-bg: var(--bg-primary);
+        }
+        html.light #flow-editor-overlay {
+            --grid-bg: #f3f4f6; /* gray-100 */
+            --grid-border: #d1d5db; /* gray-300 */
+            --cell-bg: #ffffff; /* white */
+            --cell-hover-bg: #f9fafb; /* gray-50 */
+        }
+
+        #flow-editor-grid-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .procedure-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border: 1px solid var(--grid-border);
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        .procedure-header {
+            grid-column: 1 / -1;
+            background-color: var(--grid-bg);
+            border-bottom: 1px solid var(--grid-border);
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .procedure-header h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none; /* Remove outline on focus */
+        }
+        .procedure-header h3[contenteditable="true"] {
+            cursor: text;
+            background-color: var(--cell-bg);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+        }
+
+        .column-header {
+            background-color: var(--grid-bg);
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .column-header.pm { grid-column: 1; }
+        .column-header.pf { grid-column: 2; }
+
+        .flow-grid-column {
+            min-height: 100px; /* Ensure drop targets are always present */
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            border-right: 1px solid var(--border-color);
+        }
+        .flow-grid-column:last-child { border-right: none; }
+
+        .flow-item {
+            background-color: var(--cell-bg);
+            border: 1px solid var(--border-color);
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            cursor: grab;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
+        }
+        html.light .flow-item {  box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); }
+        .flow-item:hover { background-color: var(--cell-hover-bg); }
+        .flow-item:active { cursor: grabbing; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
+
+        .sortable-ghost {
+            background-color: var(--accent-color) !important;
+            opacity: 0.5;
+            border-radius: 0.375rem;
+        }
+        .sortable-ghost .text-white, .sortable-ghost .text-xs { color: white !important; }
+
+        #add-procedure-btn {
+            border: 2px dashed var(--border-color);
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+        #add-procedure-btn:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            background-color: var(--grid-bg);
+        }
+
+        /* Settings Overlay Light Theme */
+        html.light #settings-overlay {
+            background-color: rgba(249, 250, 251, 0.95); /* bg-gray-50 with opacity */
+        }
+        html.light #settings-overlay .bg-gray-800 {
+            background-color: var(--bg-secondary); /* Use root variable for consistency */
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+        }
+        html.light #settings-overlay .text-white {
+            color: var(--text-primary);
+        }
+        html.light #settings-overlay .border-gray-700 {
+            border-color: var(--border-color);
+        }
+        html.light #settings-overlay .text-gray-300 {
+            color: var(--text-secondary);
+        }
+        html.light #settings-overlay #api-key-input {
+            background-color: var(--bg-tertiary);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+        html.light #settings-overlay #close-settings-btn {
+            color: var(--text-secondary);
+        }
+        html.light #settings-overlay #close-settings-btn:hover {
+            color: var(--text-primary);
+        }
+
+        html.light #settings-overlay #settings-content button.text-white {
+            color: white;
+        }
+
+        /* Loading Screen Light Theme */
+        html.light #loading-overlay {
+            background-color: var(--bg-primary);
+        }
+        html.light #loading-overlay .text-white {
+            color: var(--text-primary);
+        }
+        html.light #loading-overlay .bg-gray-700 {
+            background-color: var(--bg-tertiary);
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-900 z-[9999] flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="text-white text-3xl font-bold mb-4">Loading Cockpit...</div>
+        <div class="w-1/2 bg-gray-700 rounded-full h-4">
+            <div id="loading-progress" class="bg-blue-500 h-4 rounded-full transition-all duration-150" style="width: 0%"></div>
+        </div>
+        <div id="loading-percentage" class="text-white text-xl mt-2">0%</div>
+        <div class="absolute bottom-5 text-white text-sm">Made by Ulysses Villalobos & Gemini✨</div>
+    </div>
+
+    <!-- Modified layout to match V0.6 grid structure -->
+    <div id="main-content" class="max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 h-screen">
+        <!-- Left Column: Controls -->
+        <div class="control-panel lg:col-span-1 p-4 rounded-lg shadow-lg flex flex-col h-full max-h-[95vh]">
+            <!-- Static Top Section -->
+            <div class="flex-shrink-0">
+                <h2 class="text-2xl font-bold mb-2 border-b pb-2">Cockpit Flow Trainer v 0.1</h2>
+                <div class="text-sm text-gray-400 mb-4">Made by Ulysses Villalobos & Gemini✨</div>
+                <div id="main-mode-toggle-container" class="flex justify-between items-center mb-4">
+                    <div id="mode-toggle-wrapper" class="flex items-center"><span class="text-lg font-medium text-gray-400 mr-2">Practice</span><label for="edit-mode" id="edit-mode-toggle" class="flex items-center cursor-pointer"><div class="relative"><input type="checkbox" id="edit-mode" class="sr-only"><div class="block bg-gray-600 w-14 h-8 rounded-full"></div><div class="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full"></div></div></label><span class="text-lg font-medium ml-2">Edit</span></div>
+                    <button id="open-settings-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md flex items-center justify-center">
+                        <i class="fa-solid fa-gear mr-2"></i> Settings
+                    </button>
+                </div>
+                <div id="panel-controls" class="mb-4"><h3 class="text-xl font-semibold mb-2">Panels</h3><div class="flex space-x-2 mb-2 items-center"><input type="text" id="new-panel-name" placeholder="New panel name..." class="flex-grow rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-2 focus:ring-blue-500"><button id="add-panel-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md">Add</button></div><div id="panel-list" class="space-y-2"></div></div>
+                <div id="hotspot-controls" class="hidden mb-4"><h3 class="text-xl font-semibold mb-2">Hotspots</h3><div class="flex justify-between items-center"><p class="text-xs text-gray-400">Click & drag on image to create.</p><button id="reset-hotspots-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-md text-sm">Reset Hotspots</button></div></div>
+                <div class="border-t border-b border-gray-700 py-4 my-4">
+                    <h3 class="text-xl font-semibold mb-2">AI-Assisted Setup</h3>
+                    <textarea id="ai-checklist-input" rows="4" class="w-full rounded-md p-2" placeholder="Paste your checklist here..."></textarea>
+                    <button id="start-ai-setup-btn" class="mt-2 w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md flex items-center justify-center">
+                        <span class="mr-2">✨ Start AI Setup</span>
+                        <svg id="ai-setup-loader" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Scrollable Middle Section (Flows) -->
+            <div class="flex-grow flex flex-col min-h-0">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-xl font-semibold">Flows</h3>
+                    <button id="open-sequencer-window-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-3 rounded-md text-sm">Open Sequencer</button>
+                </div>
+                <input type="text" id="flow-search-input" placeholder="Search flows..." class="w-full rounded-md px-3 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="flex space-x-2 mb-2"><input type="text" id="new-flow-name" placeholder="New flow name..." class="flex-grow rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"><button id="add-flow-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Add</button></div>
+                <div id="flow-list" class="space-y-2 overflow-y-auto flex-grow pr-2"></div>
+            </div>
+        </div>
+
+        <!-- Right Column: Image and Training -->
+        <div id="image-panel-container" class="lg:col-span-2">
+            <div class="image-panel p-4 rounded-lg shadow-lg">
+                <div id="trainer-ui" class="space-y-4">
+                    <div class="flex items-center space-x-4">
+                        <select id="flow-select" class="w-full rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                        <button id="start-button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md whitespace-nowrap">Start Training</button>
+                    </div>
+                    <div id="message-box" class="p-3 border rounded-lg text-center min-h-[50px] flex items-center justify-center"><p id="message-text" class="text-lg font-medium">Select a flow to begin.</p></div>
+                </div>
+                <div id="zoom-container" class="mt-4"><div id="image-container"><div id="drop-zone"><p>Drag & Drop Cockpit Image Here</p><input type="file" id="file-input" class="hidden" accept="image/*"></div><img id="cockpit-image" class="hidden" alt="Cockpit"></div></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="practice-overlay">
+        <div id="practice-controls"></div>
+        <div id="practice-container"></div>
+    </div>
+    
+    <div id="ai-setup-overlay">
+        <div id="ai-setup-controls" class="flex flex-wrap">
+            <p id="ai-prompt-text" class="text-lg font-medium w-full md:w-auto text-center md:text-left mb-2 md:mb-0"></p>
+            <div class="flex items-center gap-4 ml-auto">
+                <select id="ai-panel-selector" class="rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                <button id="ai-add-dialogue-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Add Dialogue</button>
+                <button id="ai-next-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Next <i class="fa-solid fa-arrow-right"></i></button>
+                <button id="ai-exit-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Exit</button>
+            </div>
+        </div>
+        <div id="ai-setup-container"></div>
+    </div>
+
+    <!-- Settings Overlay -->
+    <div id="settings-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-95 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-800 w-full max-w-2xl rounded-lg shadow-2xl p-6 sm:p-8 relative">
+            <button id="close-settings-btn" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl transition-colors">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2 class="text-3xl font-bold mb-6 text-white border-b border-gray-700 pb-4">Settings</h2>
+            <div id="settings-content" class="space-y-6">
+                <div class="flex justify-between items-center"><span class="font-medium text-gray-300 text-lg">Theme</span><label for="theme" id="theme-toggle" class="flex items-center cursor-pointer"><span class="mr-3">Light</span><div class="relative"><input type="checkbox" id="theme" class="sr-only"><div class="block bg-gray-600 w-14 h-8 rounded-full"></div><div class="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full"></div></div><span class="ml-3">Dark</span></label></div>
+                
+                <div class="space-y-2">
+                    <label for="hotspot-size-slider" class="block text-lg font-medium text-gray-300">Default Hotspot Size (<span id="hotspot-size-value">75</span>px)</label>
+                    <input type="range" id="hotspot-size-slider" min="25" max="150" value="75" class="w-full">
+                </div>
+
+                <div class="space-y-2">
+                    <label for="font-size-slider" class="block text-lg font-medium text-gray-300">Hotspot Font Size (<span id="font-size-value">0.30</span>x)</label>
+                    <input type="range" id="font-size-slider" min="0.05" max="0.5" value="0.3" step="0.01" class="w-full">
+                </div>
+
+                <div class="space-y-2 pt-6 border-t border-gray-700">
+                    <label for="api-key-input" class="block text-lg font-medium text-gray-300">Gemini API Key</label>
+                    <div class="flex space-x-2">
+                        <input type="password" id="api-key-input" class="w-full rounded-md px-3 py-2 bg-gray-700 border-gray-600 text-white focus:ring-blue-500 focus:border-blue-500" placeholder="Enter your API key">
+                        <button id="save-api-key-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Save</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-6 border-t border-gray-700">
+                     <button id="open-flow-editor-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md hidden">Flow Editor</button>
+                     <button id="import-btn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Import from File</button>
+                     <input type="file" id="import-file-input" class="hidden" accept=".json">
+                     <button id="export-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Export to File</button>
+                     <button id="clear-all-btn" class="w-full bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded-md">Clear All Data</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flow Editor Modal -->
+    <div id="flow-editor-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-95 z-[1001] p-4 hidden">
+        <div class="bg-gray-800 w-full h-full rounded-lg shadow-2xl p-6 sm:p-8 relative flex flex-col">
+            <button id="close-flow-editor-btn" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl transition-colors z-10">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2 class="text-3xl font-bold mb-6 text-white border-b border-gray-700 pb-4 flex-shrink-0">Flow Editor</h2>
+            <div id="flow-editor-grid-container" class="flex-grow overflow-y-auto space-y-4 pr-2">
+                <!-- Draggable procedures and flows will be rendered here by renderFlowEditor() -->
+            </div>
+            <div class="mt-6 pt-4 border-t border-gray-700 flex justify-between items-center flex-shrink-0">
+                 <button id="add-procedure-btn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-md mt-4">Add New Procedure</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Custom Modal -->
+    <div id="custom-modal" class="modal-backdrop modal-hidden">
+        <div class="modal-content">
+            <h3 id="modal-title" class="text-xl font-bold mb-4">Notification</h3>
+            <p id="modal-text" class="mb-6"></p>
+            <div id="modal-input-container" class="hidden mb-4">
+                 <input type="text" id="modal-input" class="w-full rounded-md p-2 mt-2 border">
+            </div>
+            <div id="modal-trix-container" class="hidden mb-4">
+                <input id="modal-trix-input" type="hidden">
+                <trix-editor input="modal-trix-input" class="trix-content"></trix-editor>
+            </div>
+            <div id="modal-button-container" class="flex justify-end space-x-4 mt-6">
+                 <button id="modal-cancel-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md hidden">Cancel</button>
+                 <button id="modal-confirm-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md hidden">Confirm</button>
+                 <button id="modal-ok-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sequence Transition Modal -->
+    <div id="sequence-modal" class="modal-backdrop modal-hidden">
+        <div class="modal-content">
+            <h3 id="sequence-modal-title" class="text-xl font-bold mb-4">Next Flow</h3>
+            <p id="sequence-modal-text" class="mb-6"></p>
+            <div id="sequence-modal-button-container" class="flex justify-end space-x-4 mt-6">
+                 <button id="sequence-modal-quit-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Quit</button>
+                 <button id="sequence-modal-proceed-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Proceed</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialogue Modal -->
+    <div id="dialogue-modal" class="modal-backdrop modal-hidden">
+        <div class="modal-content">
+            <div id="dialogue-modal-text" class="mb-6 trix-content"></div>
+            <div id="dialogue-modal-button-container" class="flex justify-end space-x-4 mt-6">
+                 <button id="dialogue-modal-continue-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Loading Screen Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const loadingProgress = document.getElementById('loading-progress');
+            const loadingPercentage = document.getElementById('loading-percentage');
+            
+            let progress = 0;
+            const totalResources = 100;
+
+            const interval = setInterval(() => {
+                progress += 1;
+                const percentage = Math.min(100, Math.floor((progress / totalResources) * 100));
+                
+                loadingProgress.style.width = `${percentage}%`;
+                loadingPercentage.textContent = `${percentage}%`;
+
+                if (progress >= totalResources) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        loadingOverlay.style.opacity = '0';
+                        setTimeout(() => {
+                            loadingOverlay.classList.add('hidden');
+                        }, 500); // Match CSS transition duration
+                    }, 300);
+                }
+            }, 20); // Adjust interval for desired loading speed
+        });
+
+        // --- Theme Manager ---
+        const themeToggle = document.querySelector('#settings-overlay #theme-toggle input');
+        const applyTheme = (theme) => {
+            if (theme === 'light') document.documentElement.classList.add('light');
+            else document.documentElement.classList.remove('light');
+            themeToggle.checked = theme === 'dark';
+        };
+        themeToggle.addEventListener('change', (e) => {
+            const newTheme = e.target.checked ? 'dark' : 'light';
+            localStorage.setItem('747FlowTheme', newTheme);
+            applyTheme(newTheme);
+        });
+        applyTheme(localStorage.getItem('747FlowTheme') || 'light');
+
+        // --- DOM Elements ---
+        const dropZone = document.getElementById('drop-zone'), fileInput = document.getElementById('file-input'), imageContainer = document.getElementById('image-container'), cockpitImage = document.getElementById('cockpit-image'), editModeToggle = document.getElementById('edit-mode'), hotspotControls = document.getElementById('hotspot-controls'), newFlowNameInput = document.getElementById('new-flow-name'), addFlowBtn = document.getElementById('add-flow-btn'), flowList = document.getElementById('flow-list'), flowSelect = document.getElementById('flow-select'), startButton = document.getElementById('start-button'), messageText = document.getElementById('message-text'), panelControls = document.getElementById('panel-controls'), newPanelNameInput = document.getElementById('new-panel-name'), addPanelBtn = document.getElementById('add-panel-btn'), panelList = document.getElementById('panel-list'), zoomContainer = document.getElementById('zoom-container'), resetHotspotsBtn = document.getElementById('reset-hotspots-btn');
+        const practiceOverlay = document.getElementById('practice-overlay'), practiceContainer = document.getElementById('practice-container'), practiceControls = document.getElementById('practice-controls'), modeToggleWrapper = document.getElementById('mode-toggle-wrapper'), trainerUi = document.getElementById('trainer-ui');
+        const trainingStartControls = trainerUi.querySelector('.flex');
+        const aiSetupOverlay = document.getElementById('ai-setup-overlay'), aiSetupContainer = document.getElementById('ai-setup-container'), aiChecklistInput = document.getElementById('ai-checklist-input'), startAiSetupBtn = document.getElementById('start-ai-setup-btn'), aiSetupLoader = document.getElementById('ai-setup-loader'), aiPromptText = document.getElementById('ai-prompt-text'), aiPanelSelector = document.getElementById('ai-panel-selector'), aiExitBtn = document.getElementById('ai-exit-btn'), aiNextBtn = document.getElementById('ai-next-btn'), aiAddDialogueBtn = document.getElementById('ai-add-dialogue-btn');
+        const flowSearchInput = document.getElementById('flow-search-input');
+        
+        // Settings UI Elements
+        const openSettingsBtn = document.getElementById('open-settings-btn');
+        const settingsOverlay = document.getElementById('settings-overlay');
+        const closeSettingsBtn = document.getElementById('close-settings-btn');
+        const apiKeyInput = document.querySelector('#settings-overlay #api-key-input');
+        const saveApiKeyBtn = document.querySelector('#settings-overlay #save-api-key-btn');
+        const importBtn = document.querySelector('#settings-overlay #import-btn');
+        const importFileInput = document.querySelector('#settings-overlay #import-file-input');
+        const exportBtn = document.querySelector('#settings-overlay #export-btn');
+        const clearAllBtn = document.querySelector('#settings-overlay #clear-all-btn');
+        const hotspotSizeSlider = document.getElementById('hotspot-size-slider');
+        const hotspotSizeValue = document.getElementById('hotspot-size-value');
+        const fontSizeSlider = document.getElementById('font-size-slider');
+        const fontSizeValue = document.getElementById('font-size-value');
+
+        // Flow Editor Elements
+        const openFlowEditorBtn = document.getElementById('open-flow-editor-btn');
+        const flowEditorOverlay = document.getElementById('flow-editor-overlay');
+        const closeFlowEditorBtn = document.getElementById('close-flow-editor-btn');
+        const addProcedureBtn = document.getElementById('add-procedure-btn');
+
+        // Modal Elements
+        const customModal = document.getElementById('custom-modal'), modalTitle = document.getElementById('modal-title'), modalText = document.getElementById('modal-text'), modalInputContainer = document.getElementById('modal-input-container'), modalInput = document.getElementById('modal-input'), modalButtonContainer = document.getElementById('modal-button-container'), modalOkBtn = document.getElementById('modal-ok-btn'), modalConfirmBtn = document.getElementById('modal-confirm-btn'), modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+        // Sequence Modals
+        const sequenceModal = document.getElementById('sequence-modal'), sequenceModalTitle = document.getElementById('sequence-modal-title'), sequenceModalText = document.getElementById('sequence-modal-text'), sequenceModalProceedBtn = document.getElementById('sequence-modal-proceed-btn'), sequenceModalQuitBtn = document.getElementById('sequence-modal-quit-btn');
+        const dialogueModal = document.getElementById('dialogue-modal'), dialogueModalTitle = document.getElementById('dialogue-modal-title'), dialogueModalText = document.getElementById('dialogue-modal-text'), dialogueModalContinueBtn = document.getElementById('dialogue-modal-continue-btn');
+
+        // The button to open the external sequencer window
+        const openSequencerWindowBtn = document.getElementById('open-sequencer-window-btn'); 
+
+        // --- Communication Channel ---
+        const channel = new BroadcastChannel('flow_trainer_channel');
+        let sequencerWindow = null; 
+
+        // New robust storage event listener to handle commands from the sequencer
+        window.addEventListener('storage', (event) => {
+            if (event.key === '747FlowData' && event.newValue) {
+                const newAppData = JSON.parse(event.newValue);
+
+                // Always update the local data to stay in sync.
+                appData = newAppData;
+                
+                // Check for and process a pending action.
+                if (appData.pendingAction) {
+                    const { type, sequenceId } = appData.pendingAction;
+
+                    if (type === 'START_SEQUENCE') {
+                        // The sequenceId from pendingAction does not have the 'seq_' prefix
+                        const fullSequenceId = `seq_${sequenceId}`;
+                        const sequence = appData.sequences.find(s => s.id === sequenceId);
+                        if (sequence) {
+                            console.log(`Action received: Starting sequence '${sequence.name}'`);
+                            initiateTraining(fullSequenceId); // Use the full ID with prefix
+                        } else {
+                            console.error(`Action failed: Sequence with ID '${sequenceId}' not found.`);
+                        }
+                    }
+
+                    // The action has been processed. Remove it from the object.
+                    delete appData.pendingAction;
+
+                    // Save the data back to localStorage without the pending action
+                    // to signify it has been consumed.
+                    localStorage.setItem('747FlowData', JSON.stringify(appData));
+                } else {
+                    // This is a regular data sync, not a command.
+                    if (!isTrainingActive) {
+                        renderAll();
+                    }
+                }
+            }
+        });
+
+        // A simple focus listener for debugging or other potential future uses.
+        // It no longer triggers sequences, preventing the race condition.
+        window.addEventListener('focus', () => {
+            console.log('Trainer window focused. Data will be re-synced on next storage event.');
+        }); 
+
+        // --- State ---
+        let appData = { panels: {}, hotspots: [], flows: [], procedures: [], sequences: [] }, undoStack = [], redoStack = [], activePanelId = null, isEditMode = false, selectedHotspotId = null, hotspotClipboard = null, isDragging = false, isResizing = false, isPanning = false, resizeMode = null, dragOffsetX, dragOffsetY, panStartX, panStartY, panStartScrollX, panStartScrollY, currentFlow = [], currentStep = 0, isTrainingActive = false, altKeyPressed = false, lastTrainedFlowId = null;
+        let currentZoom = 1.0;
+        let hasUnsavedChanges = false;
+
+        window.addEventListener('beforeunload', (event) => {
+            if (hasUnsavedChanges) {
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        });
+        let aiSetupActive = false, aiSteps = [], aiCurrentStep = 0, newAiFlow = { steps: [] };
+        let settings = {
+            hotspotSize: 75,
+            fontSizeMultiplier: 0.3
+        };
+        let sequencerActive = false; 
+        let currentSequenceId = null;
+        let currentSequenceItems = [];
+        let currentSequenceIndex = 0;
+
+        // --- Modal ---
+        function hideModal() { customModal.classList.add('modal-hidden'); }
+        function showModal(title, text, options = {}) {
+            const { prompt, onConfirm, confirmText, autoClose, richText } = options;
+
+            modalTitle.textContent = title;
+            modalText.innerHTML = text.replace(/\n/g, '<br>');
+            
+            const modalTrixContainer = document.getElementById('modal-trix-container');
+            const modalInputContainer = document.getElementById('modal-input-container');
+            const modalOkBtn = document.getElementById('modal-ok-btn');
+            const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+            const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+            // Hide all optional elements initially
+            modalInputContainer.classList.add('hidden');
+            modalTrixContainer.classList.add('hidden');
+            modalOkBtn.classList.add('hidden');
+            modalConfirmBtn.classList.add('hidden');
+            modalCancelBtn.classList.add('hidden');
+
+            // Clone buttons to remove old event listeners
+            const newConfirmBtn = modalConfirmBtn.cloneNode(true);
+            modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
+            const newCancelBtn = modalCancelBtn.cloneNode(true);
+            modalCancelBtn.parentNode.replaceChild(newCancelBtn, modalCancelBtn);
+            const newOkBtn = modalOkBtn.cloneNode(true);
+            modalOkBtn.parentNode.replaceChild(newOkBtn, modalOkBtn);
+
+            newOkBtn.addEventListener('click', hideModal);
+            newCancelBtn.addEventListener('click', hideModal);
+
+            let trixEditor = null;
+
+            if (richText) {
+                modalTrixContainer.classList.remove('hidden');
+                trixEditor = modalTrixContainer.querySelector('trix-editor');
+                if (trixEditor && trixEditor.editor) {
+                    trixEditor.editor.loadHTML(prompt?.initialValue || '');
+                } else {
+                    // Fallback or error
+                    console.warn("Trix editor not found or initialized for the modal.");
+                }
+            } else if (prompt) {
+                modalInput.value = prompt.initialValue || '';
+                modalInput.placeholder = prompt.placeholder || '';
+                modalInputContainer.classList.remove('hidden');
+            }
+
+            if (onConfirm) {
+                newConfirmBtn.textContent = confirmText || 'Confirm';
+                newConfirmBtn.classList.remove('hidden');
+                newCancelBtn.classList.remove('hidden');
+                newConfirmBtn.addEventListener('click', () => {
+                    let value = null;
+                    if (richText && trixEditor && trixEditor.editor) {
+                        value = trixEditor.editor.getDocument().toString().trim() ? trixEditor.editor.element.value : '';
+                    } else if (prompt) {
+                        value = modalInput.value;
+                    }
+                    onConfirm(value);
+                    hideModal();
+                });
+            } else if (!autoClose) {
+                newOkBtn.classList.remove('hidden');
+            }
+
+            customModal.classList.remove('modal-hidden');
+
+            if (autoClose) {
+                setTimeout(hideModal, autoClose);
+            }
+        }
+
+        // --- Sequence Modal Functions ---
+        function showSequenceTransition(nextItem) {
+            const title = nextItem.type === 'flow' ? `Next Flow: ${appData.flows.find(f => f.id === nextItem.id)?.name}` : 'Next: Dialogue';
+            sequenceModalText.textContent = `The next item in the sequence is ready.`;
+            sequenceModalTitle.textContent = title;
+            sequenceModal.classList.remove('modal-hidden');
+        }
+
+        function showDialogue(dialogueItem) {
+            dialogueModalText.innerHTML = dialogueItem.text;
+            dialogueModal.classList.remove('modal-hidden');
+        }
+
+        function hideSequenceModals() {
+            sequenceModal.classList.add('modal-hidden');
+            dialogueModal.classList.add('modal-hidden');
+        }
+
+        function proceedToNextSequenceItem() {
+            console.log(`%c[proceedToNextSequenceItem] Called. Index: ${currentSequenceIndex}`, 'color: lightblue');
+            hideSequenceModals();
+
+            if (!sequencerActive || currentSequenceIndex >= currentSequenceItems.length) {
+                console.log("[proceedToNextSequenceItem] Sequence complete or inactive. Ending sequence.");
+                sequencerActive = false;
+                messageText.innerHTML = `<p class="text-lg font-bold text-green-400">Sequence Complete!</p>`;
+                showModal('Sequence Complete', 'You have successfully completed the entire sequence.');
+                setPracticeMode(false);
+                resetTraining();
+                return;
+            }
+
+            const item = currentSequenceItems[currentSequenceIndex];
+            console.log(`[proceedToNextSequenceItem] Processing item at index ${currentSequenceIndex}:`, JSON.parse(JSON.stringify(item)));
+
+            if (item.type === 'flow') {
+                const flowToTrain = appData.flows.find(f => f.id === item.id);
+                if (flowToTrain) {
+                    console.log(`[proceedToNextSequenceItem] Starting flow: ${flowToTrain.name}`);
+                    startTraining(flowToTrain, true); // Pass the entire flow object
+                } else {
+                    console.error(`[proceedToNextSequenceItem] Flow with ID ${item.id} not found in sequence. Stopping sequence.`);
+                    showModal('Sequence Error', `A flow required by the sequence could not be found. The sequence will now stop.`);
+                    setPracticeMode(false);
+                    resetTraining();
+                }
+            } else if (item.type === 'dialogue' || item.type === 'dialog') {
+                console.log(`[proceedToNextSequenceItem] Showing dialogue.`);
+                if (!practiceOverlay.classList.contains('active')) {
+                    console.log("[proceedToNextSequenceItem] Practice mode not active, activating it now before showing dialogue.");
+                    setPracticeMode(true);
+                }
+                showDialogue(item);
+                // When a dialogue is shown, the user must click 'Continue' to proceed.
+                // The event listener for the continue button will then call proceedToNextSequenceItem again.
+                // Therefore, we should not increment the index here.
+            } else {
+                 console.error(`[proceedToNextSequenceItem] Unknown item type: '${item.type}'. Skipping to next item.`);
+                 currentSequenceIndex++;
+                 proceedToNextSequenceItem();
+            }
+        }
+
+        // RE-IMPLEMENTED: applyZoom function from V0.6 logic
+        function applyZoom(newScale) {
+            if (isPanning) return;
+            if (!cockpitImage.naturalWidth || !zoomContainer.clientWidth) return;
+
+            const baseWidth = zoomContainer.clientWidth;
+            const aspect = cockpitImage.naturalHeight / cockpitImage.naturalWidth;
+
+            imageContainer.style.width = `${baseWidth * newScale}px`;
+            imageContainer.style.height = `${baseWidth * newScale * aspect}px`;
+            
+            imageContainer.style.transform = ''; 
+            imageContainer.style.transformOrigin = '';
+
+            currentZoom = newScale; // Update state variable
+            renderHotspots();
+        }
+
+        // --- History (Undo/Redo) ---
+        const saveState = () => { 
+            undoStack.push(JSON.stringify(appData)); 
+            redoStack = []; 
+            if (undoStack.length > 30) undoStack.shift(); 
+            hasUnsavedChanges = true; 
+        };
+        const undo = () => { if (undoStack.length === 0) return; redoStack.push(JSON.stringify(appData)); appData = JSON.parse(undoStack.pop()); const currentActivePanel = activePanelId; renderAll(); if (appData.panels[currentActivePanel]) setActivePanel(currentActivePanel); else if (Object.keys(appData.panels).length > 0) setActivePanel(Object.keys(appData.panels)[0]); };
+        const redo = () => { if (redoStack.length === 0) return; undoStack.push(JSON.stringify(appData)); appData = JSON.parse(redoStack.pop()); renderAll(); };
+
+        // --- Data Persistence ---
+        const saveDataToStorage = () => {
+            try {
+                const dataToStore = JSON.parse(JSON.stringify(appData));
+                for (const panelId in dataToStore.panels) {
+                    if (dataToStore.panels.hasOwnProperty(panelId)) {
+                        delete dataToStore.panels[panelId].imageData;
+                    }
+                }
+                localStorage.setItem('747FlowData', JSON.stringify(dataToStore));
+                hasUnsavedChanges = false;
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') {
+                    console.error("QuotaExceededError: LocalStorage limit exceeded. Image data is not saved to localStorage. Please use 'Export to File' for full backup.");
+                    showModal('Storage Full', 'Your browser\'s local storage limit has been exceeded. Changes will not be saved automatically. Please use "Export to File" in settings to save your work.');
+                } else {
+                    console.error("Error saving to localStorage:", e);
+                }
+            }
+        };
+
+        function loadData() {
+            const savedData = localStorage.getItem('747FlowData');
+            if (savedData) {
+                appData = JSON.parse(savedData);
+
+                // --- Data Migration ---
+                let needsSave = false;
+                if (appData.flows && appData.flows.length > 0) {
+                    console.log('Checking for flow data format migration...');
+                    appData.flows.forEach(flow => {
+                        if (flow.steps && flow.steps.length > 0) {
+                            const needsMigration = flow.steps.some(step => typeof step === 'string' || !step.type);
+                            if (needsMigration) {
+                                console.log(`Migrating flow: ${flow.name}`);
+                                needsSave = true;
+                                flow.steps = flow.steps.map(step => {
+                                    if (typeof step === 'string') {
+                                        return { type: 'hotspot', hotspotId: step };
+                                    }
+                                    if (typeof step === 'object' && !step.type && step.hotspotId) {
+                                        return { type: 'hotspot', hotspotId: step.hotspotId };
+                                    }
+                                    return step;
+                                });
+                            }
+                        }
+                    });
+                    if (needsSave) {
+                        console.log('Migration complete. Saving updated data.');
+                        saveDataToStorage();
+                    }
+                }
+
+                // Ensure all parts of appData are initialized
+                if (!appData.panels) appData.panels = {};
+                if (!appData.hotspots) appData.hotspots = [];
+                if (!appData.flows) appData.flows = [];
+                if (!appData.procedures) appData.procedures = [];
+                if (!appData.sequences) appData.sequences = [];
+
+                // Cleanup: Ensure sequences don't reference deleted flows
+                const allFlowIds = new Set(appData.flows.map(f => f.id));
+                let sequencesModified = false;
+                appData.sequences.forEach(seq => {
+                    const originalLength = seq.items.length;
+                    seq.items = seq.items.filter(item => {
+                        if (item.type === 'flow') {
+                            return allFlowIds.has(item.id);
+                        }
+                        return true; // Keep dialogue items
+                    });
+                    if (seq.items.length < originalLength) {
+                        sequencesModified = true;
+                    }
+                });
+
+                if (sequencesModified) {
+                    console.log("Cleaned up sequences with references to deleted flows.");
+                    saveDataToStorage(); // Save the cleaned data
+                }
+
+                const savedSettings = localStorage.getItem('747FlowSettings');
+                if (savedSettings) {
+                    settings = { ...settings, ...JSON.parse(savedSettings) };
+                }
+
+                const apiKey = localStorage.getItem('geminiApiKey');
+                if (apiKey) {
+                    apiKeyInput.value = apiKey;
+                }
+
+                const lastActivePanel = Object.keys(appData.panels)[0];
+                if (lastActivePanel) {
+                    setActivePanel(lastActivePanel);
+                } else {
+                    dropZone.classList.add('active');
+                    dropZone.querySelector('p').textContent = `Drag & Drop Cockpit Image Here`;
+                }
+                renderAll();
+            } else {
+                console.log("Performing a full reset as no saved data was found.");
+                appData = { panels: {}, hotspots: [], flows: [], procedures: [], sequences: [] };
+                dropZone.classList.add('active');
+                dropZone.querySelector('p').textContent = `Drag & Drop Cockpit Image Here`;
+                showModal('Welcome!', "No saved data found. Please import a data file via Settings or start creating new panels.");
+                renderAll();
+            }
+        }
+        
+        // --- Panel Functions ---
+        function addPanel() { 
+            const name = newPanelNameInput.value.trim(); 
+            if (!name) { 
+                showModal('Input Error', 'Panel name cannot be empty.');
+                return; 
+            }
+            // Check for duplicate names
+            if (Object.values(appData.panels).some(p => p.name === name)) {
+                showModal('Input Error', 'A panel with this name already exists.');
+                return;
+            }
+
+            saveState(); // For undo functionality
+
+            const id = `pnl_${Date.now()}`;
+            appData.panels[id] = { name: name, imageData: null }; // Create panel without image
+
+            newPanelNameInput.value = ''; // Clear the input field
+
+            setActivePanel(id); // Set the new panel as active, which will render it and show the drop zone
+            saveDataToStorage(); // Save the new panel structure
+        }
+        function handleFile(file) {
+            if (!activePanelId) {
+                showModal('No Panel Selected', 'Please add and select a panel from the list before adding an image.');
+                return;
+            }
+            if (!file || !file.type.startsWith('image/')) return;
+            
+            saveState();
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                appData.panels[activePanelId].imageData = e.target.result;
+                setActivePanel(activePanelId); // Re-set to load the image
+                saveDataToStorage();
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function setActivePanel(id, callback) { 
+            activePanelId = id; 
+            if(!appData.panels[id]) return; 
+
+            // Reset scroll position and zoom
+            zoomContainer.scrollTop = 0;
+            zoomContainer.scrollLeft = 0;
+
+            const onImageReady = () => {
+                applyZoom(1.0); // Set to default 100% zoom
+                renderAll();
+                if (callback) callback();
+            };
+
+            if (appData.panels[id].imageData) {
+                cockpitImage.src = appData.panels[id].imageData; 
+                cockpitImage.classList.remove('hidden'); 
+                dropZone.classList.add('hidden'); 
+                if (cockpitImage.complete) {
+                    onImageReady();
+                } else {
+                    cockpitImage.onload = onImageReady;
+                }
+            } else {
+                cockpitImage.classList.add('hidden');
+                dropZone.classList.remove('hidden');
+                dropZone.querySelector('p').textContent = `Drop image for "${appData.panels[id].name}" to restore session`;
+                applyZoom(1.0);
+                renderAll();
+                if (callback) callback();
+            }
+        }
+        function deletePanel(id) {
+            if (!appData.panels[id]) return;
+            showModal(`Delete Panel`, `Are you sure you want to delete panel "${appData.panels[id].name}" and all its hotspots? This cannot be undone.`, {
+                onConfirm: () => {
+                    saveState();
+                    const hotspotIdsToDelete = new Set(appData.hotspots.filter(h => h.panelId === id).map(h => h.id));
+                    appData.hotspots = appData.hotspots.filter(h => h.panelId !== id);
+                    appData.flows.forEach(flow => {
+                        flow.steps = flow.steps.filter(step => !hotspotIdsToDelete.has(step.hotspotId));
+                    });
+                    delete appData.panels[id];
+                    if (activePanelId === id) {
+                        const remainingPanels = Object.keys(appData.panels);
+                        activePanelId = remainingPanels.length > 0 ? remainingPanels[0] : null;
+                        if(activePanelId) { 
+                            setActivePanel(activePanelId); 
+                        } else { 
+                            cockpitImage.src = '';
+                            cockpitImage.classList.add('hidden'); 
+                            dropZone.classList.remove('hidden');
+                            dropZone.classList.add('active');
+                            dropZone.querySelector('p').textContent = `Drag & Drop Cockpit Image Here`;
+                            applyZoom(1.0);
+                            renderAll();
+                        }
+                    } else {
+                         renderAll();
+                    }
+                    saveDataToStorage();
+                },
+                confirmText: "Delete"
+            });
+        }
+        function makePanelNameEditable(spanElement, panelId) {
+            if (!isEditMode) return;
+            saveState();
+            spanElement.contentEditable = true;
+            spanElement.focus();
+            document.execCommand('selectAll', false, null);
+            const onBlur = () => {
+                spanElement.contentEditable = false;
+                const newName = spanElement.textContent.trim();
+                const oldName = appData.panels[panelId].name;
+                if (newName && newName !== oldName) {
+                    appData.panels[panelId].name = newName;
+                    renderAll();
+                    saveDataToStorage();
+                } else { spanElement.textContent = oldName; }
+                spanElement.removeEventListener('blur', onBlur);
+                spanElement.removeEventListener('keydown', onKeydown);
+            };
+            const onKeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); spanElement.blur(); } };
+            spanElement.addEventListener('blur', onBlur);
+            spanElement.addEventListener('keydown', onKeydown);
+        }
+
+        // --- Hotspot Functions ---
+        function addHotspot(x, y, w, h, makeEditable = false, name = 'Untitled') {
+            if (!activePanelId) return alert('Select a panel first.');
+            saveState();
+            const id = `hs_${Date.now()}`;
+            const newHotspot = { id, panelId: activePanelId, name, x, y, w, h };
+            appData.hotspots.push(newHotspot);
+            renderHotspots();
+            saveDataToStorage();
+            if (makeEditable) {
+                const el = document.querySelector(`.hotspot[data-id="${id}"]`);
+                if (el) makeHotspotNameEditable(el);
+            }
+            return newHotspot;
+        }
+
+        function deleteHotspot(id) {
+            const hotspot = appData.hotspots.find(h => h.id === id);
+            if (!hotspot) return;
+
+            showModal(`Delete Hotspot`, `Are you sure you want to delete the hotspot "${hotspot.name}"? This will also remove it from any flows.`, {
+                onConfirm: () => {
+                    saveState();
+                    appData.hotspots = appData.hotspots.filter(h => h.id !== id);
+                    appData.flows.forEach(flow => {
+                        flow.steps = flow.steps.filter(step => step.hotspotId !== id);
+                    });
+                     if (selectedHotspotId === id) {
+                        selectedHotspotId = null;
+                    }
+                    renderAll();
+                    saveDataToStorage();
+                },
+                confirmText: "Delete"
+            });
+        }
+
+        function makeFlowNameEditable(h4Element, flowId) {
+            if (!isEditMode) return;
+            saveState();
+            h4Element.contentEditable = true;
+            h4Element.focus();
+            document.execCommand('selectAll', false, null);
+
+            const onBlur = () => {
+                h4Element.contentEditable = false;
+                const flow = appData.flows.find(f => f.id === flowId);
+                if (!flow) return;
+
+                const oldName = flow.name;
+                const newName = h4Element.textContent.trim();
+
+                if (newName && newName !== oldName) {
+                    // Check if another flow with the new name already exists
+                    if (appData.flows.some(f => f.name === newName && f.id !== flowId)) {
+                        showModal('Name Exists', `A flow with the name "${newName}" already exists. Please choose a different name.`);
+                        h4Element.textContent = oldName; // Revert to old name
+                    } else {
+                        flow.name = newName;
+                        // Also update the name in any sequences that use this flow
+                        appData.sequences.forEach(seq => {
+                            seq.items.forEach(item => {
+                                if (item.type === 'flow' && item.id === flowId) {
+                                    item.name = newName;
+                                }
+                            });
+                        });
+                        renderAll();
+                        saveDataToStorage();
+                    }
+                } else {
+                    h4Element.textContent = oldName; // Revert if name is empty or unchanged
+                }
+                h4Element.removeEventListener('blur', onBlur);
+                h4Element.removeEventListener('keydown', onKeydown);
+            };
+
+            const onKeydown = (ev) => {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    h4Element.blur();
+                }
+            };
+
+            h4Element.addEventListener('blur', onBlur);
+            h4Element.addEventListener('keydown', onKeydown);
+        }
+
+        function makeFlowNameEditable(h4Element, flowId) {
+            if (!isEditMode) return;
+            saveState();
+            h4Element.contentEditable = true;
+            h4Element.focus();
+            document.execCommand('selectAll', false, null);
+
+            const onBlur = () => {
+                h4Element.contentEditable = false;
+                const flow = appData.flows.find(f => f.id === flowId);
+                if (!flow) return;
+
+                const oldName = flow.name;
+                const newName = h4Element.textContent.trim();
+
+                if (newName && newName !== oldName) {
+                    // Check if another flow with the new name already exists
+                    if (appData.flows.some(f => f.name === newName && f.id !== flowId)) {
+                        showModal('Name Exists', `A flow with the name "${newName}" already exists. Please choose a different name.`);
+                        h4Element.textContent = oldName; // Revert to old name
+                    } else {
+                        flow.name = newName;
+                        // Also update the name in any sequences that use this flow
+                        appData.sequences.forEach(seq => {
+                            seq.items.forEach(item => {
+                                if (item.type === 'flow' && item.id === flowId) {
+                                    item.name = newName;
+                                }
+                            });
+                        });
+                        renderAll();
+                        saveDataToStorage();
+                    }
+                } else {
+                    h4Element.textContent = oldName; // Revert if name is empty or unchanged
+                }
+                h4Element.removeEventListener('blur', onBlur);
+                h4Element.removeEventListener('keydown', onKeydown);
+            };
+
+            const onKeydown = (ev) => {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    h4Element.blur();
+                }
+            };
+
+            h4Element.addEventListener('blur', onBlur);
+            h4Element.addEventListener('keydown', onKeydown);
+        }
+
+        function makeHotspotNameEditable(hotspotEl) {
+            if (!isEditMode) return;
+            saveState();
+            hotspotEl.classList.add('editing');
+            const span = hotspotEl.querySelector('span');
+            span.contentEditable = true;
+            span.focus();
+            document.execCommand('selectAll', false, null);
+            const onBlur = () => {
+                hotspotEl.classList.remove('editing');
+                span.contentEditable = false;
+                const hotspotData = appData.hotspots.find(h => h.id === hotspotEl.dataset.id);
+                if (!hotspotData) return;
+                const oldName = hotspotData.name; const newName = span.textContent.trim();
+                if (newName && newName !== oldName) { 
+                    hotspotData.name = newName; 
+                    renderFlows(); 
+                    saveDataToStorage(); 
+                } else { 
+                    span.textContent = oldName; 
+                }
+                span.removeEventListener('blur', onBlur);
+                span.removeEventListener('keydown', onKeydown);
+            };
+            const onKeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); span.blur(); } };
+            span.addEventListener('blur', onBlur);
+            span.addEventListener('keydown', onKeydown);
+        }
+
+        // --- Flow Functions ---
+        function addFlow() { 
+            const name = newFlowNameInput.value.trim(); 
+            if (!name) {
+                showModal('Input Error', 'Flow name cannot be empty.');
+                return;
+            }
+            if (appData.flows.find(f => f.name === name)) {
+                showModal('Input Error', 'A flow with this name already exists.');
+                return;
+            }
+
+            saveState(); 
+            
+            const newFlow = { 
+                id: `flow_${Date.now()}`,
+                name: name, 
+                steps: [],
+                role: name.toLowerCase().includes('pm') ? 'pm' : 'pf'
+            };
+
+            console.log(`[addFlow]: CREATED new flow with valid ID: ${newFlow.id}`);
+
+            appData.flows.push(newFlow);
+
+            if (!appData.procedures || appData.procedures.length === 0) {
+                appData.procedures = [{ id: `proc_${Date.now()}`, name: 'Default Procedure', pf: [], pm: [] }];
+            }
+            const procedure = appData.procedures[0];
+            if (procedure[newFlow.role]) {
+                procedure[newFlow.role].push(newFlow.id);
+            } else {
+                console.warn(`Could not add flow to procedure role "${newFlow.role}" as it does not exist.`);
+            }
+
+            newFlowNameInput.value = ''; 
+            renderAll(); 
+            saveDataToStorage(); 
+        }
+        function deleteFlow(flowId) { 
+            const flow = appData.flows.find(f => f.id === flowId);
+            if (!flow) return;
+
+            showModal('Delete Flow', `Are you sure you want to delete the flow "${flow.name}"?`, {
+                onConfirm: () => {
+                    saveState(); 
+                    appData.flows = appData.flows.filter(f => f.id !== flowId); 
+
+                    // Also remove from any procedures that might contain it
+                    appData.procedures.forEach(proc => {
+                        if (proc.pf) proc.pf = proc.pf.filter(id => id !== flowId);
+                        if (proc.pm) proc.pm = proc.pm.filter(id => id !== flowId);
+                    });
+
+                    // Also remove from any sequences
+                    appData.sequences.forEach(seq => {
+                        seq.items = seq.items.filter(item => item.type !== 'flow' || item.id !== flowId);
+                    });
+                    renderAll(); 
+                    saveDataToStorage();
+                },
+                confirmText: "Delete"
+            });
+        }
+        function addStepToFlow(flowId, hotspotName) {
+            if (flowId && hotspotName) {
+                const hotspot = appData.hotspots.find(h => h.name === hotspotName && h.panelId === activePanelId);
+                const flow = appData.flows.find(f => f.id === flowId);
+                if (hotspot && flow) {
+                    saveState();
+                    flow.steps.push({ type: 'hotspot', hotspotId: hotspot.id });
+                    renderFlows();
+                    saveDataToStorage();
+                }
+            }
+        }
+        function removeStepFromFlow(flowId, stepIndex) { 
+            saveState(); 
+            const flow = appData.flows.find(f => f.id === flowId);
+            if (flow) {
+                flow.steps.splice(stepIndex, 1);
+            }
+            renderFlows(); 
+            saveDataToStorage(); 
+        }
+        
+        // --- Rendering ---
+        function renderAll() { renderPanels(); renderHotspots(); renderFlows(); renderFlowSelect(); }
+        function renderPanels() {
+            panelList.innerHTML = '';
+            Object.entries(appData.panels).forEach(([id, panel]) => {
+                const isActive = id === activePanelId;
+                const item = document.createElement('div');
+                item.className = `panel-item flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${isActive ? 'bg-blue-600' : 'panel-item-inactive'}`;
+                item.dataset.panelId = id;
+                const span = document.createElement('span');
+                span.textContent = panel.name;
+                span.className = 'flex-grow cursor-text p-1';
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-panel-btn text-red-400 hover:text-red-300 text-xs ml-2 flex-shrink-0 p-1';
+                deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+                
+                item.appendChild(span);
+                item.appendChild(deleteBtn);
+                panelList.appendChild(item);
+            });
+        }
+        function renderHotspots() {
+            imageContainer.querySelectorAll('.hotspot').forEach(el => el.remove());
+            if (!cockpitImage.naturalWidth) return;
+            appData.hotspots.filter(h => h.panelId === activePanelId).forEach(hData => {
+                const el = document.createElement('div');
+                el.className = 'hotspot';
+                if (hData.id === selectedHotspotId) {
+                    el.classList.add('selected');
+                }
+                el.dataset.id = hData.id;
+                el.style.left = `${hData.x}%`;
+                el.style.top = `${hData.y}%`;
+                el.style.width = `${hData.w}%`;
+                el.style.height = `${hData.h}%`;
+                
+                const scaledWidth = (hData.w / 100) * imageContainer.clientWidth;
+                el.style.fontSize = `${Math.max(1, scaledWidth * settings.fontSizeMultiplier)}px`;
+
+                const nameParts = hData.name.split(' - ');
+                const displayText = aiSetupActive && nameParts.length > 1 ? nameParts[1] : hData.name;
+                el.innerHTML = `<div class="hotspot-inner"><span>${displayText}</span></div>`;
+                if (isEditMode) { 
+                    el.innerHTML += `<div class="delete-handle"><i class="fa-solid fa-xmark"></i></div>`;
+                    el.innerHTML += `<div class="resize-handle se"></div>`;
+                }
+                el.addEventListener('mousedown', onHotspotMouseDown);
+                el.addEventListener('dblclick', (e) => { 
+                    if(isEditMode) makeHotspotNameEditable(e.currentTarget);
+                });
+                imageContainer.appendChild(el);
+            });
+            updateHotspotVisibility();
+        }
+        function renderFlows() {
+            const currentlyExpanded = [...document.querySelectorAll('.collapsible-container.expanded')].map(el => {
+                const header = el.previousElementSibling;
+                return header ? header.querySelector('h4').textContent : null;
+            }).filter(Boolean);
+
+            flowList.innerHTML = '';
+            const searchTerm = flowSearchInput.value.toLowerCase();
+            const filteredFlows = appData.flows.filter(({name}) => name.toLowerCase().includes(searchTerm));
+
+            filteredFlows.forEach((flow) => {
+                const { id, name, steps } = flow;
+                const flowEl = document.createElement('div');
+                flowEl.className = 'flow-container-bg p-3 rounded-md';
+                flowEl.dataset.flowId = id;
+                
+                const stepsHtml = (steps || []).map((step, index) => {
+                    if (!step) return '';
+
+                    if (step.type === 'dialogue') {
+                        return `<div class="flow-step flex items-center justify-between p-2 bg-purple-800 bg-opacity-50" data-flow-id="${id}" data-step-index="${index}" data-step-type="dialogue">
+                                    <div class="flex items-center flex-grow min-w-0">
+                                        <i class="fa-solid fa-bars handle mr-2 cursor-move text-gray-400"></i>
+                                        <i class="fa-solid fa-comment-dots text-purple-300 mr-2"></i>
+                                        <span class="truncate flex-grow">${step.text.replace(/<[^>]+>/g, '')}</span>
+                                    </div>
+                                    <button data-flow-id="${id}" data-step-index="${index}" class="remove-step-btn text-red-400 hover:text-red-300 text-xs ml-2 flex-shrink-0"><i class="fa-solid fa-trash"></i></button>
+                                </div>`;
+                    }
+
+                    const hotspotId = step.hotspotId || step; // Handle both old and new formats
+                    const hotspot = appData.hotspots.find(h => h.id === hotspotId);
+
+                    if (!hotspot) {
+                        return `<div class="flow-step flex items-center justify-between p-2 bg-red-900 bg-opacity-50" data-index="${index}">
+                                    <div class="flex items-center">
+                                        <i class="fa-solid fa-triangle-exclamation text-red-400 mr-2"></i>
+                                        <span>Broken Step (Hotspot ID: ${hotspotId})</span>
+                                    </div>
+                                    <button data-flow-id="${id}" data-step-index="${index}" class="remove-step-btn text-red-400 hover:text-red-300 text-xs ml-2"><i class="fa-solid fa-trash"></i></button>
+                                </div>`;
+                    }
+                    const panelName = appData.panels[hotspot.panelId]?.name || 'Unknown';
+                    const switchBtn = hotspot.panelId !== activePanelId ? `<button data-panel-id="${hotspot.panelId}" class="switch-panel-btn text-xs bg-blue-600 hover:bg-blue-700 rounded px-1 ml-2">Go</button>` : '';
+                    return `<div class="flow-step flex items-center justify-between p-2" data-index="${index}"><div class="flex items-center"><i class="fa-solid fa-bars handle mr-2 cursor-move text-gray-400"></i><span>${index + 1}. ${hotspot.name} <em class="text-gray-400 text-xs">(${panelName})</em></span></div><div class="flex items-center">${switchBtn}<button data-flow-id="${id}" data-step-index="${index}" class="remove-step-btn text-red-400 hover:text-red-300 text-xs ml-2"><i class="fa-solid fa-trash"></i></button></div></div>`;
+                }).join('');
+                
+                const header = document.createElement('div');
+                header.className = 'flow-header flex justify-between items-center cursor-pointer';
+                header.setAttribute('tabindex', '0');
+                header.innerHTML = `<h4 class="text-lg font-medium">${name}</h4><div class="flex items-center"><button data-flow-id="${id}" class="delete-flow-btn text-red-500 hover:text-red-400 mr-2"><i class="fa-solid fa-trash-can"></i></button><i class="fa-solid fa-chevron-down transition-transform"></i></div>`;
+                
+                const wrapper = document.createElement('div');
+                wrapper.className = 'collapsible-container';
+
+                const content = document.createElement('div');
+                content.className = 'collapsible-content';
+                content.innerHTML = `<div class="space-y-1 flow-steps-container mt-2">${stepsHtml}</div><div class="flex space-x-2 mt-2"><select class="add-step-select w-full rounded-md px-2 py-1 text-sm"><option value="">-- Add Hotspot --</option>${appData.hotspots.filter(h => h.panelId === activePanelId).sort((a, b) => a.name.localeCompare(b.name)).map(h => `<option value="${h.name}">${h.name}</option>`).join('')}</select><button data-flow-id="${id}" class="add-step-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded-md text-sm flex-shrink-0">Add</button><button data-flow-id="${id}" class="add-dialogue-to-flow-btn bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-2 rounded-md text-sm flex-shrink-0">Add Dialogue</button></div>`;
+                
+                wrapper.appendChild(content);
+
+                if (currentlyExpanded.includes(name) || (filteredFlows.length === 1 && searchTerm.length > 0)) {
+                    wrapper.classList.add('expanded');
+                    header.querySelector('.fa-chevron-down').classList.add('rotate-180');
+                }
+
+                flowEl.appendChild(header);
+                flowEl.appendChild(wrapper);
+                flowList.appendChild(flowEl);
+                
+                Sortable.create(content.querySelector('.flow-steps-container'), { 
+                    animation: 150, 
+                    handle: '.handle', 
+                    onEnd: (evt) => { 
+                        saveState(); 
+                        const targetFlow = appData.flows.find(f => f.name === name);
+                        if (targetFlow) {
+                            const [movedItem] = targetFlow.steps.splice(evt.oldIndex, 1); 
+                            targetFlow.steps.splice(evt.newIndex, 0, movedItem); 
+                        }
+                        renderFlows(); 
+                        saveDataToStorage(); 
+                    } 
+                });
+            });
+        }
+        function renderFlowSelect() {
+            const flowSelectPractice = practiceControls.querySelector('select');
+            const flowSelectMain = document.getElementById('flow-select');
+            const targetSelects = [flowSelectPractice, flowSelectMain].filter(Boolean);
+            
+            targetSelects.forEach(select => {
+                const currentVal = select.value;
+                select.innerHTML = ''; // Clear existing options
+
+                const placeholder = document.createElement('option');
+                placeholder.value = "";
+                placeholder.textContent = "-- Select an item to train --";
+                select.appendChild(placeholder);
+
+                // Add Sequences optgroup
+                if (appData.sequences && appData.sequences.length > 0) {
+                    const seqGroup = document.createElement('optgroup');
+                    seqGroup.label = 'Sequences';
+                    appData.sequences.forEach(seq => {
+                        const option = document.createElement('option');
+                        option.value = `seq_${seq.id}`;
+                        option.textContent = seq.name;
+                        seqGroup.appendChild(option);
+                    });
+                    select.appendChild(seqGroup);
+                }
+
+                // Add Flows optgroup
+                if (appData.flows && appData.flows.length > 0) {
+                    const flowGroup = document.createElement('optgroup');
+                    flowGroup.label = 'Individual Flows';
+                    appData.flows.forEach(flow => {
+                        const option = document.createElement('option');
+                        option.value = `flow_${flow.id}`;
+                        option.textContent = flow.name;
+                        flowGroup.appendChild(option);
+                    });
+                    select.appendChild(flowGroup);
+                }
+                
+                if (select.children.length === 1) { // Only placeholder exists
+                    placeholder.textContent = "No flows or sequences created";
+                }
+
+                select.value = currentVal;
+            });
+        }
+        
+        function updateHotspotVisibility() {
+            const aiFlowHotspotIds = aiSetupActive ? new Set(newAiFlow.steps.map(step => step.hotspotId)) : new Set();
+
+            imageContainer.querySelectorAll('.hotspot').forEach(el => {
+                const hotspotId = el.dataset.id;
+                
+                if (el.classList.contains('fading-out')) {
+                    el.style.display = 'flex';
+                    return;
+                }
+
+                // Default to hidden
+                el.style.display = 'none';
+                el.style.pointerEvents = 'none';
+
+                if (aiSetupActive) {
+                    // In AI mode, only show hotspots belonging to the new flow
+                    if (aiFlowHotspotIds.has(hotspotId)) {
+                        el.style.display = 'flex';
+                        el.style.pointerEvents = 'auto';
+                    }
+                } else if (isEditMode) {
+                    // In regular Edit mode, show all hotspots
+                    el.style.display = 'flex';
+                    el.style.pointerEvents = 'auto';
+                } else if (isTrainingActive) {
+                    // In Training mode, only show completed hotspots
+                    const isCompleted = el.classList.contains('completed');
+                    if (isCompleted) {
+                        el.style.display = 'flex';
+                    }
+                }
+            });
+            imageContainer.classList.toggle('edit-mode-active', isEditMode || aiSetupActive);
+        }
+
+        // --- Training & UI Mode Logic ---
+        function setPracticeMode(active) {
+            console.log(`%c[setPracticeMode] Called with active: ${active}`, 'color: orange');
+            const imagePanelContainer = document.getElementById('image-panel-container');
+            const mainModeToggleContainer = document.getElementById('main-mode-toggle-container');
+
+            if (active) {
+                const exitButton = document.createElement('button');
+                exitButton.id = 'exit-practice-btn';
+                exitButton.className = 'absolute top-4 right-4 text-gray-400 hover:text-white text-2xl transition-colors';
+                exitButton.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                exitButton.onclick = () => {
+                    setPracticeMode(false);
+                    resetTraining();
+                };
+
+                practiceControls.innerHTML = '';
+                practiceControls.appendChild(trainerUi);
+                practiceControls.appendChild(exitButton);
+                practiceContainer.appendChild(imagePanelContainer);
+                practiceOverlay.classList.add('active');
+                renderFlowSelect();
+            } else {
+                const imagePanel = imagePanelContainer.querySelector('.image-panel');
+                imagePanel.insertBefore(trainerUi, document.getElementById('zoom-container'));
+                document.getElementById('main-content').appendChild(imagePanelContainer);
+                mainModeToggleContainer.insertBefore(modeToggleWrapper, openSettingsBtn);
+                practiceOverlay.classList.remove('active');
+            }
+        }
+        
+        function startTraining(flow, isPartOfSequence = false) {
+            if (!flow || !flow.steps) {
+                console.warn(`Skipping invalid flow: ${flow?.name}`);
+                if (isPartOfSequence) {
+                    currentSequenceIndex++;
+                    proceedToNextSequenceItem();
+                }
+                return;
+            }
+
+            // Sanitize the steps to remove any that point to deleted hotspots
+            const originalStepCount = flow.steps.length;
+            const sanitizedSteps = flow.steps.filter(step => {
+                if (step.type === 'dialogue') return true;
+                // Check for new format OR old format (an object with hotspotId but no type)
+                if (step.type === 'hotspot' || (typeof step === 'object' && step.hotspotId && !step.type)) {
+                    return appData.hotspots.some(h => h.id === step.hotspotId);
+                }
+                return false;
+            });
+
+            if (sanitizedSteps.length < originalStepCount) {
+                console.warn(`Found and removed ${originalStepCount - sanitizedSteps.length} steps with missing hotspots from flow '${flow.name}'.`);
+            }
+
+            if (sanitizedSteps.length === 0) {
+                showModal('Empty or Invalid Flow', `The flow "${flow.name}" contains no valid steps and will be skipped.`);
+                if (isPartOfSequence) {
+                    document.getElementById('modal-ok-btn').addEventListener('click', () => {
+                        currentSequenceIndex++;
+                        proceedToNextSequenceItem();
+                    }, { once: true });
+                }
+                return;
+            }
+
+            lastTrainedFlowId = flow.id; 
+            isTrainingActive = true; 
+            currentStep = 0; 
+            currentFlow = sanitizedSteps; 
+            imageContainer.querySelectorAll('.hotspot').forEach(el => {
+                el.classList.remove('completed');
+                el.classList.remove('fading-out');
+            });
+            
+            if (isEditMode) { 
+                isEditMode = false;
+                editModeToggle.checked = false;
+                hotspotControls.classList.add('hidden');
+                renderHotspots();
+            }
+            
+            setPracticeMode(true);
+            updateUIForNextStep(isPartOfSequence); 
+        }
+
+        function resetTraining() { 
+            isTrainingActive = false; 
+            imageContainer.querySelectorAll('.hotspot').forEach(el => {
+                el.classList.remove('completed');
+                el.classList.remove('fading-out');
+            });
+            updateHotspotVisibility(); 
+            if (trainingStartControls) trainingStartControls.style.display = 'flex';
+        }
+
+        function isElementInView(el) {
+            const containerRect = zoomContainer.getBoundingClientRect();
+            const elRect = el.getBoundingClientRect();
+            return (
+                elRect.top >= containerRect.top &&
+                elRect.left >= containerRect.left &&
+                elRect.bottom <= containerRect.bottom &&
+                elRect.right <= containerRect.right
+            );
+        }
+
+        function panToHotspot(hotspotId) {
+            const hotspotEl = document.querySelector(`.hotspot[data-id="${hotspotId}"]`);
+            if (!hotspotEl) return;
+
+            const wasHidden = hotspotEl.style.display === 'none';
+            if (wasHidden) {
+                hotspotEl.style.display = 'flex';
+            }
+
+            const inView = isElementInView(hotspotEl);
+
+            if (wasHidden) {
+                hotspotEl.style.display = 'none';
+            }
+
+            if (inView) {
+                return;
+            }
+
+            const hotspotData = appData.hotspots.find(h => h.id === hotspotId);
+            if (!hotspotData) return;
+
+            const hotspotCenterX = hotspotData.x + hotspotData.w / 2;
+            const hotspotCenterY = hotspotData.y + hotspotData.h / 2;
+
+            const scaledCenterX = (hotspotCenterX / 100) * imageContainer.offsetWidth;
+            const scaledCenterY = (hotspotCenterY / 100) * imageContainer.offsetHeight;
+
+            const containerWidth = zoomContainer.clientWidth;
+            const containerHeight = zoomContainer.clientHeight;
+
+            let targetScrollLeft = scaledCenterX - (containerWidth / 2);
+            let targetScrollTop = scaledCenterY - (containerHeight / 2);
+
+            const randomXOffset = (Math.random() - 0.5) * (containerWidth * 0.3);
+            const randomYOffset = (Math.random() - 0.5) * (containerHeight * 0.3);
+            targetScrollLeft += randomXOffset;
+            targetScrollTop += randomYOffset;
+
+            targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, zoomContainer.scrollWidth - containerWidth));
+            targetScrollTop = Math.max(0, Math.min(targetScrollTop, zoomContainer.scrollHeight - containerHeight));
+
+            zoomContainer.scrollTo({
+                top: targetScrollTop,
+                left: targetScrollLeft,
+                behavior: 'smooth'
+            });
+        }
+
+        function updateUIForNextStep(isPartOfSequence = false) {
+            if (trainingStartControls) trainingStartControls.style.display = 'flex';
+
+            let prevStepMessage = '';
+            if (currentStep > 0) {
+                const prevStepData = currentFlow[currentStep - 1];
+                if (prevStepData) {
+                    const prevHotspot = appData.hotspots.find(h => h.id === prevStepData.hotspotId);
+                    if (prevHotspot) {
+                        prevStepMessage = `
+                            <div class="text-sm text-green-400 flex items-center justify-center">
+                                <i class="fa-solid fa-check mr-2"></i>
+                                <span>Completed: ${prevHotspot.name}</span>
+                            </div>`;
+                        
+                        const prevHotspotEl = document.querySelector(`.hotspot[data-id="${prevHotspot.id}"]`);
+                        if (prevHotspotEl) {
+                            prevHotspotEl.classList.add('fading-out');
+                        }
+                    }
+                }
+            }
+
+            if (currentStep >= currentFlow.length) {
+                isTrainingActive = false;
+                if (sequencerActive) {
+                    currentSequenceIndex++;
+                    if (currentSequenceIndex < currentSequenceItems.length) {
+                        showSequenceTransition(currentSequenceItems[currentSequenceIndex]);
+                    } else {
+                        proceedToNextSequenceItem();
+                    }
+                } else {
+                    const completedFlowObject = appData.flows.find(f => f.id === lastTrainedFlowId);
+                    messageText.innerHTML = `
+                        <div class="flex flex-col items-center justify-center gap-2">
+                            ${prevStepMessage}
+                            <p class="text-lg font-bold text-green-400 mt-2">Flow Complete!</p>
+                            <div class="flex gap-4 mt-2">
+                                <button id="repeat-flow-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Repeat Flow</button>
+                                <button onclick="setPracticeMode(false); resetTraining();" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Select New Item</button>
+                            </div>
+                        </div>
+                    `;
+                    const repeatBtn = document.getElementById('repeat-flow-btn');
+                    if (repeatBtn && completedFlowObject) {
+                        repeatBtn.addEventListener('click', () => startTraining(completedFlowObject, false));
+                    }
+                }
+                return;
+            }
+
+            const nextStep = currentFlow[currentStep];
+            if (!nextStep) {
+                currentStep++;
+                updateUIForNextStep(isPartOfSequence);
+                return;
+            }
+
+            if (nextStep.type === 'dialogue') {
+                showDialogue(nextStep);
+                // FIX: Do not increment step here. The dialogue modal's 'continue' button will handle it.
+                return;
+            }
+
+            const hotspot = appData.hotspots.find(h => h.id === nextStep.hotspotId);
+            if (!hotspot) {
+                currentStep++;
+                updateUIForNextStep(isPartOfSequence);
+                return;
+            }
+
+            const nextStepMessage = `<div class="text-lg font-medium text-gray-300 mt-1">Next: ${hotspot.name}</div>`;
+            messageText.innerHTML = `
+                <div class="flex flex-col items-center justify-center">
+                    ${prevStepMessage}
+                    ${nextStepMessage}
+                </div>
+            `;
+
+            const updateAndPan = () => {
+                updateHotspotVisibility();
+                setTimeout(() => panToHotspot(hotspot.id), 50);
+            };
+
+            if (activePanelId !== hotspot.panelId) {
+                setActivePanel(hotspot.panelId, updateAndPan);
+            } else {
+                updateAndPan();
+            }
+        }
+
+        function onHotspotClick(e) {
+            e.stopPropagation();
+            if (!isTrainingActive || isEditMode) return;
+            const hotspotEl = e.currentTarget;
+            const hotspotData = appData.hotspots.find(h => h.id === hotspotEl.dataset.id);
+            const currentStepData = currentFlow[currentStep];
+            
+            if (hotspotData && currentStepData && hotspotData.id === currentStepData.hotspotId) {
+                hotspotEl.style.display = 'flex';
+                hotspotEl.classList.add('completed');
+                hotspotEl.classList.add('correct-flash');
+                
+                setTimeout(() => {
+                    hotspotEl.classList.remove('correct-flash');
+                }, 500); // Clean up flash class after animation
+
+                currentStep++;
+                updateUIForNextStep(sequencerActive);
+
+            } else if (isTrainingActive) {
+                hotspotEl.classList.add('error-flash');
+                setTimeout(() => hotspotEl.classList.remove('error-flash'), 500);
+            }
+        }
+        
+        function onImageClick(e) {
+            if (isEditMode && !e.target.closest('.hotspot')) {
+                if (selectedHotspotId) {
+                    selectedHotspotId = null;
+                    renderHotspots(); 
+                }
+            }
+
+            if (aiSetupActive) { handleAiSetupClick(e); return; }
+            if (isTrainingActive && !e.target.closest('.hotspot')) {
+                const rect = imageContainer.getBoundingClientRect();
+                const clickX = (e.clientX - rect.left) / rect.width * 100;
+                const clickY = (e.clientY - rect.top) / rect.height * 100;
+
+                const currentStepData = currentFlow[currentStep];
+                if (!currentStepData) return;
+
+                const correctHotspotData = appData.hotspots.find(h => h.id === currentStepData.hotspotId);
+                if (!correctHotspotData) return;
+
+                const isCorrectClick = (
+                    clickX >= correctHotspotData.x &&
+                    clickX <= correctHotspotData.x + correctHotspotData.w &&
+                    clickY >= correctHotspotData.y &&
+                    clickY <= correctHotspotData.y + correctHotspotData.h
+                );
+
+                const correctHotspotEl = document.querySelector(`.hotspot[data-id="${correctHotspotData.id}"]`);
+
+                if (isCorrectClick) {
+                    if (correctHotspotEl) {
+                        correctHotspotEl.style.display = 'flex';
+                        correctHotspotEl.classList.add('completed');
+                        correctHotspotEl.classList.add('correct-flash');
+                        
+                        setTimeout(() => {
+                            correctHotspotEl.classList.remove('correct-flash');
+                        }, 500);
+
+                        currentStep++;
+                        updateUIForNextStep(sequencerActive);
+                    }
+                } else {
+                    if (correctHotspotEl) {
+                        correctHotspotEl.style.display = 'flex';
+                        correctHotspotEl.classList.add('error-flash');
+                        setTimeout(() => {
+                            correctHotspotEl.classList.remove('error-flash');
+                            if (!correctHotspotEl.classList.contains('completed')) {
+                                correctHotspotEl.style.display = 'none';
+                            }
+                        }, 500);
+                    }
+                }
+            }
+        }
+
+        // --- Event Listeners & Handlers ---
+        let clickTimer = null;
+        panelList.addEventListener('click', (e) => {
+            const panelItem = e.target.closest('.panel-item');
+            if (!panelItem) return;
+            const panelId = panelItem.dataset.panelId;
+
+            if (e.target.closest('.delete-panel-btn')) {
+                e.stopPropagation(); 
+                deletePanel(panelId);
+                return;
+            }
+
+            if (clickTimer === null) {
+                clickTimer = setTimeout(() => {
+                    clickTimer = null;
+                    if (activePanelId !== panelId) {
+                       setActivePanel(panelId);
+                    }
+                }, 250);
+            } else {
+                clearTimeout(clickTimer);
+                clickTimer = null;
+                if (isEditMode && panelId === activePanelId) {
+                    makePanelNameEditable(panelItem.querySelector('span'), panelId);
+                }
+            }
+        });
+
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+            e.target.value = null;
+        });
+        editModeToggle.addEventListener('change', (e) => { 
+            isEditMode = e.target.checked; 
+            hotspotControls.classList.toggle('hidden', !isEditMode); 
+            if (!isEditMode) {
+                selectedHotspotId = null; // Deselect when leaving edit mode
+                if(isTrainingActive) {
+                    resetTraining();
+                    setPracticeMode(false);
+                }
+            }
+            renderHotspots(); 
+        });
+        addPanelBtn.addEventListener('click', addPanel);
+        addFlowBtn.addEventListener('click', addFlow);
+
+        flowList.addEventListener('dblclick', e => {
+            if (!isEditMode) return;
+
+            const stepElement = e.target.closest('.flow-step[data-step-type="dialogue"]');
+            if (!stepElement) return;
+
+            const flowId = stepElement.dataset.flowId;
+            const stepIndex = parseInt(stepElement.dataset.stepIndex, 10);
+            const flow = appData.flows.find(f => f.id === flowId);
+
+            if (!flow || !flow.steps[stepIndex] || flow.steps[stepIndex].type !== 'dialogue') {
+                console.error("Could not find the dialogue step to edit.", { flowId, stepIndex });
+                return;
+            }
+
+            const dialogueStep = flow.steps[stepIndex];
+
+            showModal('Edit Dialogue', '', {
+                richText: true,
+                prompt: { initialValue: dialogueStep.text },
+                confirmText: 'Save',
+                onConfirm: (newText) => {
+                    if (newText !== null) { // Allow saving empty text
+                        saveState();
+                        dialogueStep.text = newText;
+                        renderFlows();
+                        saveDataToStorage();
+                    }
+                }
+            });
+        });
+        
+        // --- Sequence Event Listeners ---
+        sequenceModalProceedBtn.addEventListener('click', proceedToNextSequenceItem);
+
+        sequenceModalQuitBtn.addEventListener('click', () => {
+            hideSequenceModals();
+            sequencerActive = false;
+            showModal('Sequence Quit', 'You have quit the sequence.');
+            setPracticeMode(false);
+            resetTraining();
+        });
+
+        dialogueModalContinueBtn.addEventListener('click', () => {
+            hideSequenceModals();
+
+            if (isTrainingActive) {
+                // Dialogue was part of a flow. Increment the step now and proceed.
+                currentStep++;
+                updateUIForNextStep(sequencerActive);
+            } else if (sequencerActive) {
+                // Dialogue was a direct item in the sequence. We need to advance the sequence index.
+                currentSequenceIndex++;
+                proceedToNextSequenceItem();
+            }
+        });
+
+        function initiateTraining(selectedValue) {
+            if (!selectedValue) {
+                showModal('No Item Selected', 'Please select a flow or sequence to begin.');
+                return;
+            }
+
+            if (selectedValue.startsWith('seq_')) {
+                const sequenceId = selectedValue.replace('seq_', '');
+                const sequenceToTrain = appData.sequences.find(s => s.id === sequenceId);
+                
+                if (sequenceToTrain && sequenceToTrain.items.length > 0) {
+                    let wasHealed = false;
+                    sequenceToTrain.items.forEach(item => {
+                        if (item.type === 'flow') {
+                            const flowExistsById = appData.flows.some(f => f.id === item.id);
+                            if (!flowExistsById) {
+                                const flowMatchByName = appData.flows.find(f => f.name === item.name);
+                                if (flowMatchByName) {
+                                    if (!flowMatchByName.id) {
+                                        flowMatchByName.id = `flow_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+                                    }
+                                    item.id = flowMatchByName.id;
+                                    wasHealed = true;
+                                }
+                            }
+                        }
+                    });
+
+                    if (wasHealed) saveDataToStorage();
+
+                    const originalItemCount = sequenceToTrain.items.length;
+                    const sanitizedItems = sequenceToTrain.items.filter(item => {
+                        if (!item || typeof item.type === 'undefined') return false;
+                        if (item.type === 'flow') return appData.flows.some(f => f.id === item.id);
+                        if (item.type === 'dialogue' || item.type === 'dialog') return typeof item.text !== 'undefined';
+                        return false; 
+                    });
+
+                    if (sanitizedItems.length < originalItemCount) {
+                        const missingFlowNames = sequenceToTrain.items
+                            .filter(item => item.type === 'flow' && !sanitizedItems.some(s => s.id === item.id))
+                            .map(item => item.name)
+                            .join(', ');
+                        showModal('Sequence Warning', `The following flows could not be found and will be skipped: ${missingFlowNames}.`);
+                    }
+
+                    if (sanitizedItems.length > 0) {
+                        currentSequenceId = sequenceId;
+                        currentSequenceItems = sanitizedItems;
+                        currentSequenceIndex = 0;
+                        sequencerActive = true;
+                        proceedToNextSequenceItem();
+                    } else {
+                        showModal('Empty Sequence', 'This sequence contains no valid items to run.');
+                    }
+
+                } else {
+                    showModal('Empty Sequence', 'This sequence contains no items.');
+                }
+            } else if (selectedValue.startsWith('flow_')) {
+                const flowId = selectedValue.replace('flow_', '');
+                const flowToTrain = appData.flows.find(f => f.id === flowId);
+                if (flowToTrain) {
+                    sequencerActive = false;
+                    startTraining(flowToTrain, false);
+                } else {
+                    showModal('Flow Not Found', 'The selected flow could not be found.');
+                }
+            }
+        }
+
+        startButton.addEventListener('click', () => initiateTraining(flowSelect.value));
+
+        imageContainer.addEventListener('click', onImageClick);
+        
+        let isDrawing = false;
+        let drawStartX, drawStartY;
+        let tempHotspotEl = null;
+
+        function startDrawingHotspot(e) {
+            if (isPanning || !isEditMode || aiSetupActive) return;
+            e.preventDefault();
+            isDrawing = true;
+
+            const rect = imageContainer.getBoundingClientRect();
+            drawStartX = (e.clientX - rect.left) / rect.width * 100;
+            drawStartY = (e.clientY - rect.top) / rect.height * 100;
+
+            tempHotspotEl = document.createElement('div');
+            tempHotspotEl.className = 'hotspot';
+            tempHotspotEl.style.left = `${drawStartX}%`;
+            tempHotspotEl.style.top = `${drawStartY}%`;
+            imageContainer.appendChild(tempHotspotEl);
+
+            window.addEventListener('mousemove', drawHotspot);
+            window.addEventListener('mouseup', endDrawingHotspot);
+        }
+
+        function drawHotspot(e) {
+            if (!isDrawing) return;
+            const rect = imageContainer.getBoundingClientRect();
+            const currentX = (e.clientX - rect.left) / rect.width * 100;
+            const currentY = (e.clientY - rect.top) / rect.height * 100;
+
+            const newX = Math.min(drawStartX, currentX);
+            const newY = Math.min(drawStartY, currentY);
+            const newW = Math.abs(drawStartX - currentX);
+            const newH = Math.abs(drawStartY - currentY);
+
+            tempHotspotEl.style.left = `${newX}%`;
+            tempHotspotEl.style.top = `${newY}%`;
+            tempHotspotEl.style.width = `${newW}%`;
+            tempHotspotEl.style.height = `${newH}%`;
+        }
+
+        function endDrawingHotspot(e) {
+            if (!isDrawing) return;
+            isDrawing = false;
+            window.removeEventListener('mousemove', drawHotspot);
+            window.removeEventListener('mouseup', endDrawingHotspot);
+
+            if (tempHotspotEl) {
+                const w = parseFloat(tempHotspotEl.style.width);
+                const h = parseFloat(tempHotspotEl.style.height);
+
+                if (w > 0.5 && h > 0.5) {
+                    const x = parseFloat(tempHotspotEl.style.left);
+                    const y = parseFloat(tempHotspotEl.style.top);
+                    addHotspot(x, y, w, h, true);
+                }
+                tempHotspotEl.remove();
+                tempHotspotEl = null;
+            }
+        }
+        
+        function onImageContainerMouseDown(e) {
+            if (e.target.closest('.hotspot')) {
+                return;
+            }
+            if (!isEditMode) {
+                return;
+            }
+            startDrawingHotspot(e);
+        }
+        imageContainer.addEventListener('mousedown', onImageContainerMouseDown);
+
+        function onHotspotMouseDown(e) {
+            if (isTrainingActive || !isEditMode) return;
+            e.stopPropagation();
+
+            if (e.target.closest('.delete-handle')) {
+                const hotspotEl = e.currentTarget;
+                deleteHotspot(hotspotEl.dataset.id);
+                return; 
+            }
+            
+            const hotspotEl = e.currentTarget;
+            selectedHotspotId = hotspotEl.dataset.id;
+            renderHotspots(); 
+            
+            if (e.target.classList.contains('resize-handle')) { 
+                isResizing = true; 
+            } else {
+                isDragging = true;
+            }
+            
+            const parentRect = imageContainer.getBoundingClientRect();
+            dragOffsetX = (e.clientX - parentRect.left) / parentRect.width * 100;
+            dragOffsetY = (e.clientY - parentRect.top) / parentRect.height * 100;
+            
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        }
+
+        function onMouseMove(e) {
+            const hotspotEl = document.querySelector(`.hotspot[data-id="${selectedHotspotId}"]`);
+            if (!hotspotEl) return;
+            const parentRect = imageContainer.getBoundingClientRect();
+            const x = ((e.clientX - parentRect.left) / parentRect.width) * 100;
+            const y = ((e.clientY - parentRect.top) / parentRect.height) * 100;
+            const hotspotData = appData.hotspots.find(h => h.id === selectedHotspotId);
+
+            if (isDragging) { 
+                hotspotData.x = x - (hotspotData.w / 2);
+                hotspotData.y = y - (hotspotData.h / 2);
+            } else if (isResizing) { 
+                const newW = x - hotspotData.x; 
+                const newH = y - hotspotData.y;
+                hotspotData.w = Math.max(1, newW);
+                hotspotData.h = Math.max(1, newH);
+            }
+            
+            hotspotEl.style.left = `${hotspotData.x}%`;
+            hotspotEl.style.top = `${hotspotData.y}%`;
+            hotspotEl.style.width = `${hotspotData.w}%`;
+            hotspotEl.style.height = `${hotspotData.h}%`;
+            hotspotEl.style.fontSize = `${Math.max(1, (hotspotData.w / 100) * imageContainer.clientWidth * settings.fontSizeMultiplier)}px`;
+        }
+        function onMouseUp() { 
+            if (isDragging || isResizing) { 
+                saveState(); 
+                saveDataToStorage(); 
+            } 
+            isDragging = false; 
+            isResizing = false; 
+            window.removeEventListener('mousemove', onMouseMove); 
+            window.removeEventListener('mouseup', onMouseUp); 
+        }
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z') { e.preventDefault(); undo(); return; }
+                if (e.key === 'y') { e.preventDefault(); redo(); return; }
+            }
+            
+            if(aiSetupActive) {
+                if (e.key === 'ArrowRight') { e.preventDefault(); handleAiNav(1); }
+                return;
+            }
+
+            if (e.ctrlKey || e.metaKey) {
+                if (isEditMode && selectedHotspotId) {
+                    if (e.key === 'c') { const h = appData.hotspots.find(h => h.id === selectedHotspotId); if (h) hotspotClipboard = { ...h }; }
+                    if (e.key === 'v' && hotspotClipboard) { saveState(); const n = { ...hotspotClipboard, id: `hs_${Date.now()}`, x: hotspotClipboard.x + 2, y: hotspotClipboard.y + 2 }; appData.hotspots.push(n); renderHotspots(); saveDataToStorage(); }
+                }
+            }
+            if (isEditMode && selectedHotspotId && (e.key === 'Delete' || e.key === 'Backspace')) {
+                e.preventDefault();
+                deleteHotspot(selectedHotspotId);
+                selectedHotspotId = null;
+            }
+        });
+        
+        zoomContainer.addEventListener('wheel', (e) => {
+            if (isPanning) return;
+            if (e.ctrlKey) {
+                e.preventDefault();
+
+                let newScale = currentZoom;
+
+                if (e.deltaY < 0) { 
+                    newScale = Math.min(5, currentZoom + 0.1);
+                } else { 
+                    newScale = Math.max(1, currentZoom - 0.1); 
+                }
+
+                if (Math.abs(newScale - currentZoom) < 0.001) return;
+
+                const rect = zoomContainer.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                const scrollLeftRatio = (zoomContainer.scrollLeft + mouseX) / imageContainer.offsetWidth;
+                const scrollTopRatio = (zoomContainer.scrollTop + mouseY) / imageContainer.offsetHeight;
+
+                applyZoom(newScale);
+
+                const newScrollLeft = scrollLeftRatio * imageContainer.offsetWidth - mouseX;
+                const newScrollTop = scrollTopRatio * imageContainer.offsetHeight - mouseY;
+                
+                const maxScrollLeft = zoomContainer.scrollWidth - zoomContainer.clientWidth;
+                const maxScrollTop = zoomContainer.scrollHeight - zoomContainer.clientHeight;
+
+                zoomContainer.scrollLeft = Math.max(0, Math.min(newScrollLeft, maxScrollLeft));
+                zoomContainer.scrollTop = Math.max(0, Math.min(newScrollTop, maxScrollTop));
+            }
+        });
+        
+        zoomContainer.addEventListener('mousedown', (e) => { if (e.button === 2) { e.preventDefault(); isPanning = true; zoomContainer.classList.add('panning'); panStartX = e.clientX; panStartY = e.clientY; panStartScrollX = zoomContainer.scrollLeft; panStartScrollY = zoomContainer.scrollTop; } });
+        zoomContainer.addEventListener('contextmenu', e => e.preventDefault());
+        window.addEventListener('mousemove', (e) => { if (isPanning) { const dx = e.clientX - panStartX; const dy = e.clientY - panStartY; zoomContainer.scrollLeft = panStartScrollX - dx; zoomContainer.scrollTop = panStartScrollY - dy; } });
+        window.addEventListener('mouseup', () => { isPanning = false; zoomContainer.classList.remove('panning'); });
+
+        window.addEventListener('beforeunload', function (e) {
+            const hasData = appData.flows.length > 0 || appData.hotspots.length > 0 || Object.keys(appData.panels).length > 0;
+            if (hasData) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+        
+        flowList.addEventListener('click', (e) => {
+            const target = e.target;
+            const flowHeader = target.closest('.flow-header');
+            const deleteBtn = target.closest('.delete-flow-btn');
+            const addStepBtn = target.closest('.add-step-btn');
+            const addDialogueToFlowBtn = target.closest('.add-dialogue-to-flow-btn');
+            const removeStepBtn = target.closest('.remove-step-btn');
+            const switchPanelBtn = target.closest('.switch-panel-btn');
+
+            if (deleteBtn) {
+                e.stopPropagation();
+                deleteFlow(deleteBtn.dataset.flowId);
+                return;
+            }
+            if (addStepBtn) {
+                addStepToFlow(addStepBtn.dataset.flowId, addStepBtn.previousElementSibling.value);
+                return;
+            }
+            if (addDialogueToFlowBtn) {
+                const flowId = addDialogueToFlowBtn.dataset.flowId;
+                showModal('Add Dialogue', 'Enter the dialogue text below.', {
+                    richText: true,
+                    prompt: { placeholder: 'Enter dialogue text...' },
+                    onConfirm: (dialogueText) => {
+                        if (dialogueText && dialogueText.trim() !== '') {
+                            const flow = appData.flows.find(f => f.id === flowId);
+                            if (flow) {
+                                saveState();
+                                flow.steps.push({ type: 'dialogue', text: dialogueText });
+                                renderFlows();
+                                saveDataToStorage();
+                            }
+                        }
+                    },
+                    confirmText: 'Add Dialogue'
+                });
+                return;
+            }
+            if (removeStepBtn) {
+                removeStepFromFlow(removeStepBtn.dataset.flowId, parseInt(removeStepBtn.dataset.stepIndex));
+                return;
+            }
+            if (switchPanelBtn) {
+                setActivePanel(switchPanelBtn.dataset.panelId);
+                return;
+            }
+
+            if (flowHeader) {
+                const flowId = flowHeader.closest('.flow-container-bg').dataset.flowId;
+                if (e.detail === 2) { // Double-click
+                    makeFlowNameEditable(flowHeader.querySelector('h4'), flowId);
+                    return;
+                }
+
+                const flowContainer = flowHeader.closest('.flow-container-bg');
+                const wrapper = flowContainer.querySelector('.collapsible-container');
+                const icon = flowHeader.querySelector('.fa-chevron-down');
+
+                const isExpanded = wrapper.classList.contains('expanded');
+
+                document.querySelectorAll('.collapsible-container.expanded').forEach(openWrapper => {
+                    if (openWrapper !== wrapper) {
+                        openWrapper.classList.remove('expanded');
+                        openWrapper.closest('.flow-container-bg').querySelector('.fa-chevron-down').classList.remove('rotate-180');
+                    }
+                });
+
+                wrapper.classList.toggle('expanded', !isExpanded);
+                icon.classList.toggle('rotate-180', !isExpanded);
+            }
+        });
+
+        flowList.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'Enter') {
+                const flowHeader = e.target.closest('.flow-header');
+                if (flowHeader) {
+                    e.preventDefault();
+                    flowHeader.click();
+                }
+            }
+        });
+
+        flowSearchInput.addEventListener('input', renderFlows);
+
+        openSequencerWindowBtn.addEventListener('click', () => {
+            if (sequencerWindow && !sequencerWindow.closed) {
+                sequencerWindow.focus();
+            } else {
+                sequencerWindow = window.open('FlowSequencer.html', 'FlowSequencer', 'width=1200,height=800');
+                sequencerWindow.onload = () => {
+                    const dataForSequencer = {
+                        type: 'initData',
+                        flows: appData.flows,
+                        sequences: appData.sequences
+                    };
+                    channel.postMessage(dataForSequencer);
+                };
+            }
+        });
+
+        channel.addEventListener('message', (event) => {
+            const { type, payload } = event.data;
+            if (type === 'saveSequences') {
+                appData.sequences = payload;
+                saveDataToStorage();
+                renderFlowSelect(); 
+                showModal('Sequences Saved', 'Your new sequences have been saved in the main trainer.');
+            } else if (type === 'requestData') {
+                 const dataForSequencer = {
+                    type: 'initData',
+                    flows: appData.flows,
+                    sequences: appData.sequences
+                };
+                channel.postMessage(dataForSequencer);
+            } else if (type === 'startSequence') {
+                window.focus();
+                showModal('Starting Sequence', `Initializing training for sequence...`, { autoClose: 500 });
+                setTimeout(() => {
+                    initiateTraining(`seq_${payload.sequenceId}`);
+                }, 500);
+            }
+        });
+
+        // --- AI Assisted Setup ---
+        async function startAiSetup() {
+            const checklist = aiChecklistInput.value.trim();
+            if (!checklist) {
+                showModal('Input Error', 'Please paste a checklist first.');
+                return;
+            }
+            if (Object.keys(appData.panels).length === 0) {
+                showModal('Input Error', 'Please add at least one panel before starting AI setup.');
+                return;
+            }
+
+            let apiKey = localStorage.getItem('geminiApiKey');
+            if (!apiKey) {
+                showModal('API Key Required', 'Please enter your Gemini API Key to use the AI Setup feature.', {
+                    prompt: { placeholder: 'Enter your API key here...' },
+                    onConfirm: (newKey) => {
+                        if (!newKey) {
+                            showModal('Error', 'API Key cannot be empty.');
+                            return;
+                        }
+                        localStorage.setItem('geminiApiKey', newKey);
+                        apiKeyInput.value = newKey; 
+                        proceedWithAiSetup(checklist, newKey);
+                    },
+                    confirmText: 'Save & Continue'
+                });
+                return; 
+            }
+            
+            proceedWithAiSetup(checklist, apiKey);
+        }
+
+        async function proceedWithAiSetup(checklist, apiKey) {
+             showModal('New Flow Name', 'Please enter a name for the new flow.', {
+                prompt: { initialValue: checklist.split('\n')[0].trim() || `AI Flow ${Date.now()}` },
+                onConfirm: async (flowName) => {
+                     if (!flowName) {
+                         showModal('Input Error', 'Flow name cannot be empty.');
+                         return;
+                     }
+
+                     aiSetupLoader.classList.remove('hidden');
+                     startAiSetupBtn.disabled = true;
+
+                     const prompt = `Parse the following aviation checklist into a JSON array of objects. Each object should have a "button" key (the name of the control) and an "action" key (the state it should be set to). For example, '1. BAT - ON' becomes '{"button": "BAT", "action": "ON"}'. Checklist:\n\n${checklist}`;
+
+                     try {
+                         let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                         const payload = { contents: chatHistory };
+                         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                         
+                         const response = await fetch(apiUrl, {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify(payload)
+                         });
+                         
+                         if (!response.ok) {
+                             const errorData = await response.json();
+                             throw new Error(`API Error ${response.status}: ${errorData.error.message}`);
+                         }
+                         
+                         const result = await response.json();
+                         const textResponse = result.candidates[0].content.parts[0].text;
+                         
+                         const jsonStringMatch = textResponse.match(/```json\n([\s\S]*?)\n```/);
+                         const jsonString = jsonStringMatch ? jsonStringMatch[1] : textResponse.match(/\[[\s\S]*\]/)[0];
+
+                         aiSteps = JSON.parse(jsonString);
+                         
+                         aiSetupActive = true;
+                         aiCurrentStep = 0;
+                         newAiFlow = { id: `flow_${Date.now()}`, name: flowName, steps: [], role: 'pf' };
+                         
+                         renderHotspots();
+
+                         const imagePanelContainer = document.getElementById('image-panel-container');
+                         aiSetupContainer.appendChild(imagePanelContainer);
+                         aiSetupOverlay.classList.add('active');
+                         updateAiSetupUI();
+
+                     } catch (error) {
+                         console.error("AI Setup Error:", error);
+                         showModal("AI Setup Error", error.message);
+                     } finally {
+                         aiSetupLoader.classList.add('hidden');
+                         startAiSetupBtn.disabled = false;
+                     }
+                },
+                confirmText: 'Create Flow'
+             });
+        }
+
+        function updateAiSetupUI() {
+            if (aiCurrentStep >= aiSteps.length) {
+                finishAiSetup();
+                return;
+            }
+            const currentStep = aiSteps[aiCurrentStep];
+            aiPromptText.textContent = `Click on the "${currentStep.button}" button`;
+            aiNextBtn.disabled = true;
+
+            aiPanelSelector.innerHTML = '';
+            Object.entries(appData.panels).forEach(([id, panel]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = panel.name;
+                if (id === activePanelId) option.selected = true;
+                aiPanelSelector.appendChild(option);
+            });
+        }
+
+        function handleAiSetupClick(e) {
+            if (!aiSetupActive || e.target.closest('.hotspot')) return;
+
+            const rect = imageContainer.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width * 100;
+            const y = (e.clientY - rect.top) / rect.height * 100;
+            
+            const w = (settings.hotspotSize / cockpitImage.naturalWidth) * 100;
+            const h = (settings.hotspotSize / cockpitImage.naturalHeight) * 100;
+
+            const centeredX = x - (w / 2);
+            const centeredY = y - (h / 2);
+
+            const currentStepData = aiSteps[aiCurrentStep];
+            const hotspotName = `${currentStepData.button} - ${currentStepData.action}`;
+            
+            saveState();
+            const id = `hs_${Date.now()}`;
+            const newHotspotData = { id, panelId: activePanelId, name: hotspotName, x: centeredX, y: centeredY, w, h };
+            
+            newAiFlow.steps.push({ hotspotId: newHotspotData.id });
+            
+            appData.hotspots.push(newHotspotData);
+            
+            renderHotspots();
+            saveDataToStorage();
+
+            aiPromptText.textContent = `Hotspot created. Move/resize it, or click Next to continue.`
+            aiNextBtn.disabled = false;
+        }
+        
+        function handleAiNav(direction) {
+            if (direction === 1) {
+                aiCurrentStep++;
+                updateAiSetupUI();
+            }
+        }
+
+        function finishAiSetup() {
+            saveState();
+            appData.flows.push(newAiFlow);
+            saveDataToStorage();
+            exitAiSetup();
+            showModal("Success", `Successfully created flow: "${newAiFlow.name}"`);
+        }
+        
+        function exitAiSetup() {
+            aiSetupActive = false;
+            newAiFlow = { steps: [] }; // Clear the temporary flow
+            const imagePanelContainer = document.getElementById('image-panel-container');
+            document.getElementById('main-content').appendChild(imagePanelContainer);
+            aiSetupOverlay.classList.remove('active');
+            renderAll();
+        }
+
+        startAiSetupBtn.addEventListener('click', startAiSetup);
+        aiPanelSelector.addEventListener('change', (e) => setActivePanel(e.target.value));
+                aiNextBtn.addEventListener('click', () => handleAiNav(1));
+        aiExitBtn.addEventListener('click', exitAiSetup);
+        aiAddDialogueBtn.addEventListener('click', () => {
+            showModal('Add Dialogue', 'Enter the dialogue text below. This will be added as a step in the current flow.', {
+                richText: true,
+                prompt: { placeholder: 'Enter dialogue text...' },
+                onConfirm: (dialogueText) => {
+                    if (dialogueText && dialogueText.trim() !== '') {
+                        const newDialogueStep = {
+                            type: 'dialogue',
+                            text: dialogueText
+                        };
+                        // Insert the new dialogue step before the current hotspot step
+                        newAiFlow.steps.splice(aiCurrentStep, 0, newDialogueStep);
+                        showModal('Dialogue Added', 'The dialogue has been added to the flow. Please now click on the hotspot for the current step.', { autoClose: 2500 });
+                        // Refresh the current step's display without advancing
+                        handleAiNav(0);
+                    }
+                },
+                confirmText: 'Add Dialogue'
+            });
+        });
+        
+        resetHotspotsBtn.addEventListener('click', () => {
+            showModal('Reset Hotspots', 'Are you sure you want to delete all hotspots on this panel? This will also remove them from all flows.', {
+                onConfirm: () => {
+                    saveState();
+                    const hotspotIdsToDelete = new Set(appData.hotspots.filter(h => h.panelId === activePanelId).map(h => h.id));
+                    
+                    if (hotspotIdsToDelete.size > 0) {
+                        appData.hotspots = appData.hotspots.filter(h => !hotspotIdsToDelete.has(h.id));
+                        appData.flows.forEach(flow => {
+                            flow.steps = flow.steps.filter(step => !hotspotIdsToDelete.has(step.hotspotId));
+                        });
+                    }
+                    
+                    renderAll();
+                    saveDataToStorage();
+                },
+                confirmText: 'Delete All'
+            });
+        });
+
+        // --- Settings & Flow Editor Listeners ---
+        function saveAppSettings() {
+            localStorage.setItem('747FlowSettings', JSON.stringify(settings));
+        }
+
+        function loadAppSettings() {
+            const savedSettings = localStorage.getItem('747FlowSettings');
+            if (savedSettings) {
+                settings = JSON.parse(savedSettings);
+            }
+            hotspotSizeSlider.value = settings.hotspotSize;
+            hotspotSizeValue.textContent = settings.hotspotSize;
+            fontSizeSlider.value = settings.fontSizeMultiplier;
+            fontSizeValue.textContent = parseFloat(settings.fontSizeMultiplier).toFixed(2);
+        }
+
+        openSettingsBtn.addEventListener('click', () => settingsOverlay.classList.remove('hidden'));
+        closeSettingsBtn.addEventListener('click', () => settingsOverlay.classList.add('hidden'));
+        
+        fontSizeSlider.addEventListener('input', (e) => {
+            const newMultiplier = parseFloat(e.target.value);
+            fontSizeValue.textContent = newMultiplier.toFixed(2);
+            settings.fontSizeMultiplier = newMultiplier;
+            renderHotspots(); // Re-render hotspots in real-time as slider moves
+        });
+
+        fontSizeSlider.addEventListener('change', (e) => {
+            settings.fontSizeMultiplier = parseFloat(e.target.value);
+            saveAppSettings(); // Save only when user releases the slider
+        });
+        
+        hotspotSizeSlider.addEventListener('input', (e) => {
+            const newSize = parseInt(e.target.value, 10);
+            hotspotSizeValue.textContent = newSize;
+            settings.hotspotSize = newSize;
+        });
+
+        hotspotSizeSlider.addEventListener('change', (e) => {
+            settings.hotspotSize = parseInt(e.target.value, 10);
+            saveAppSettings();
+        });
+
+
+        openFlowEditorBtn.addEventListener('click', () => {
+            settingsOverlay.classList.add('hidden');
+            renderFlowEditor();
+            flowEditorOverlay.classList.remove('hidden');
+        });
+        closeFlowEditorBtn.addEventListener('click', () => {
+            flowEditorOverlay.classList.add('hidden');
+            settingsOverlay.classList.remove('hidden');
+        });
+        
+        addProcedureBtn.addEventListener('click', () => {
+            saveState();
+            const newProcedure = {
+                id: `proc_${Date.now()}`,
+                name: 'New Procedure (Click to rename)',
+                pf: [],
+                pm: []
+            };
+            appData.procedures.push(newProcedure);
+            saveDataToStorage();
+            renderFlowEditor();
+        });
+
+        saveApiKeyBtn.addEventListener('click', () => {
+            localStorage.setItem('geminiApiKey', apiKeyInput.value);
+            showModal('API Key Saved', 'Your Gemini API key has been saved locally.');
+        });
+        function loadApiKey() {
+            apiKeyInput.value = localStorage.getItem('geminiApiKey') || '';
+        }
+
+        // --- Import / Export / Clear Data Listeners ---
+        importBtn.addEventListener('click', () => importFileInput.click());
+        importFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+                    if (importedData.panels && importedData.hotspots && importedData.flows) {
+                        showModal('Import Data', 'This will overwrite all current data. Are you sure?', {
+                            onConfirm: () => {
+                                appData = importedData; 
+                                appData.panels = appData.panels || {};
+                                appData.hotspots = appData.hotspots || [];
+                                appData.flows = appData.flows || [];
+                                appData.procedures = appData.procedures || [];
+                                appData.sequences = appData.sequences || [];
+                                
+                                saveDataToStorage();
+                                
+                                const firstPanelId = Object.keys(appData.panels)[0];
+                                if (firstPanelId) {
+                                    setActivePanel(firstPanelId);
+                                } else {
+                                    renderAll(); 
+                                }
+                                
+                                showModal('Success', 'Data imported successfully.');
+                            },
+                            confirmText: 'Overwrite'
+                        });
+                    } else {
+                        showModal('Import Error', 'Invalid file format.');
+                    }
+                } catch (err) {
+                    showModal('Import Error', 'Could not parse the file. Make sure it is a valid JSON export.');
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+            importFileInput.value = '';
+        });
+
+        exportBtn.addEventListener('click', () => {
+            try {
+                const dataStr = JSON.stringify(appData, null, 2);
+                const dataBlob = new Blob([dataStr], {type: "application/json"});
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                link.download = `CockpitFlowTrainer_Export_${timestamp}.json`;
+                link.href = url;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                showModal('Export Error', 'Could not export data.');
+                console.error(err);
+            }
+        });
+
+        clearAllBtn.addEventListener('click', () => {
+            showModal('Clear All Data', 'Are you sure you want to permanently delete all data? This action cannot be undone.', {
+                onConfirm: () => {
+                    localStorage.removeItem('747FlowData');
+                    localStorage.removeItem('747FlowSettings');
+                    localStorage.removeItem('geminiApiKey');
+                    appData = { panels: {}, hotspots: [], flows: [], procedures: [], sequences: [] };
+                    activePanelId = null;
+                    cockpitImage.src = '';
+                    cockpitImage.classList.add('hidden');
+                    dropZone.classList.add('active');
+                    dropZone.querySelector('p').textContent = `Drag & Drop Cockpit Image Here`;
+                    renderAll();
+                    showModal('Data Cleared', 'All data has been removed.');
+                },
+                confirmText: 'Delete Everything'
+            });
+        });
+
+        // --- Flow Editor Functions ---
+        function renderFlowEditor() {
+            const container = document.getElementById('flow-editor-grid-container');
+            container.innerHTML = '';
+
+            if (!appData.procedures || appData.procedures.length === 0) {
+                appData.procedures = [{ id: `proc_${Date.now()}`, name: 'Default Procedure', pf: [], pm: [] }];
+            }
+
+            appData.procedures.forEach(procedure => {
+                const procedureGrid = document.createElement('div');
+                procedureGrid.className = 'procedure-grid';
+                procedureGrid.dataset.procedureId = procedure.id;
+
+                const pfFlowsHtml = procedure.pf.map(flowId => {
+                    const flow = appData.flows.find(f => f.id === flowId);
+                    return flow ? createFlowItemHtml(flow) : '';
+                }).join('');
+
+                const pmFlowsHtml = procedure.pm.map(flowId => {
+                    const flow = appData.flows.find(f => f.id === flowId);
+                    return flow ? createFlowItemHtml(flow) : '';
+                }).join('');
+
+                procedureGrid.innerHTML = `
+                    <div class="procedure-header">
+                        <h3 contenteditable="true" data-procedure-id="${procedure.id}">${procedure.name}</h3>
+                        <button class="delete-procedure-btn text-red-500 hover:text-red-400" data-procedure-id="${procedure.id}">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                    <div class="column-header pf">Pilot Flying</div>
+                    <div class="column-header pm">Pilot Monitoring</div>
+                    <div class="flow-grid-column pf-column" data-role="pf" data-procedure-id="${procedure.id}">${pfFlowsHtml}</div>
+                    <div class="flow-grid-column pm-column" data-role="pm" data-procedure-id="${procedure.id}">${pmFlowsHtml}</div>
+                `;
+                container.appendChild(procedureGrid);
+            });
+
+            document.querySelectorAll('.flow-grid-column').forEach(col => {
+                Sortable.create(col, {
+                    group: 'flows',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    onEnd: (evt) => {
+                        const itemEl = evt.item;
+                        const flowId = itemEl.dataset.flowId;
+                        const fromProcedureId = evt.from.dataset.procedureId;
+                        const toProcedureId = evt.to.dataset.procedureId;
+                        const fromRole = evt.from.dataset.role;
+                        const toRole = evt.to.dataset.role;
+
+                        saveState();
+
+                        const fromProcedure = appData.procedures.find(p => p.id === fromProcedureId);
+                        if (fromProcedure) {
+                            const fromIndex = fromProcedure[fromRole].indexOf(flowId);
+                            if (fromIndex > -1) fromProcedure[fromRole].splice(fromIndex, 1);
+                        }
+                        
+                        const toProcedure = appData.procedures.find(p => p.id === toProcedureId);
+                        if (toProcedure) {
+                            toProcedure[toRole].splice(evt.newIndex, 0, flowId);
+                            const movedFlow = appData.flows.find(f => f.id === flowId);
+                            if (movedFlow) movedFlow.role = toRole;
+                        }
+                        
+                        saveDataToStorage();
+                        renderFlowEditor();
+                    }
+                });
+            });
+            
+            container.querySelectorAll('.procedure-header h3').forEach(h3 => {
+                h3.addEventListener('blur', (e) => {
+                    const procedureId = e.target.dataset.procedureId;
+                    const newName = e.target.textContent.trim();
+                    const procedure = appData.procedures.find(p => p.id === procedureId);
+                    if (procedure && newName) {
+                        procedure.name = newName;
+                        saveDataToStorage();
+                    }
+                });
+                h3.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.target.blur();
+                    }
+                });
+            });
+
+            container.querySelectorAll('.delete-procedure-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const procedureId = e.currentTarget.dataset.procedureId;
+                    deleteProcedure(procedureId);
+                });
+            });
+        }
+
+        function createFlowItemHtml(flow) {
+            return `
+                <div class="flow-item flex justify-between items-center" data-flow-id="${flow.id}">
+                    <span class="font-medium">${flow.name}</span>
+                    <span class="text-xs text-gray-400">${(flow.steps || []).length} steps</span>
+                </div>
+            `;
+        }
+
+        function deleteProcedure(procedureId) {
+            showModal('Delete Procedure', 'Are you sure you want to delete this entire procedure? The flows within it will become unassigned.', {
+                onConfirm: () => {
+                    saveState();
+                    appData.procedures = appData.procedures.filter(p => p.id !== procedureId);
+                    saveDataToStorage();
+                    renderFlowEditor();
+                },
+                confirmText: 'Delete'
+            });
+        }
+
+        // --- Initial Load ---
+        loadAppSettings();
+        loadApiKey();
+        loadData();
+
+        window.addEventListener('storage', (event) => {
+            if (event.key === '747FlowData') {
+                console.log('Detected data change from another window. Reloading...');
+                loadData();
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            const storedSequence = localStorage.getItem('currentTrainingSequence');
+            if (storedSequence) {
+                const sequenceToTrain = JSON.parse(storedSequence);
+                if (sequenceToTrain && sequenceToTrain.items && sequenceToTrain.items.length > 0) {
+                    showModal('Starting Sequence', `Initiating training for sequence: "${sequenceToTrain.name}"`);
+                    currentSequence = sequenceToTrain.items.filter(item => item.type === 'flow').map(item => {
+                        return appData.flows.find(f => f.id === item.id);
+                    }).filter(Boolean);
+                    currentSequenceIndex = 0;
+                    sequencerActive = true;
+                    startTraining(currentSequence[0], true);
+                    localStorage.removeItem('currentTrainingSequence');
+                }
+            }
+        });
+
+        editModeToggle.checked = true;
+        editModeToggle.dispatchEvent(new Event('change'));
+
+        openSequencerWindowBtn.addEventListener('click', () => {
+            window.open('FlowSequencer.html', '_blank');
+        });
+    </script>
+</body>
+</html>
