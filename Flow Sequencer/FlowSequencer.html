@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow Sequencer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.3.3/purify.min.js"></script>
+    <!-- Trix Rich Text Editor -->
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/trix@2.0.0/dist/trix.css">
+    <script type="text/javascript" src="https://unpkg.com/trix@2.0.0/dist/trix.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #111827; --bg-secondary: #1f2937; --bg-tertiary: #374151;
+            --text-primary: #f3f4f6; --text-secondary: #9ca3af; --text-tertiary: #6b7281;
+            --border-color: #4b5563; --accent-color: #3b82f6; --danger-color: #ef4444;
+            --transition-speed: 0.3s;
+        }
+        html.light {
+            --bg-primary: #f9fafb; /* Light background */
+            --bg-secondary: #ffffff; /* White for panels */
+            --bg-tertiary: #f3f4f6; /* Light grey for item backgrounds */
+            --text-primary: #1f2937; /* Dark grey for primary text */
+            --text-secondary: #6b7281; /* Medium grey for secondary text */
+            --text-tertiary: #a1a1aa; /* Lighter grey for tertiary text */
+            --border-color: #d1d5db;
+        }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--bg-primary); 
+            color: var(--text-primary);
+            transition: background-color var(--transition-speed), color var(--transition-speed);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        .sequencer-container {
+            display: flex;
+            flex-grow: 1;
+            height: calc(100vh - 57px); /* Adjust for top bar height */
+        }
+        .library-panel, .builder-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .library-panel {
+            width: 350px;
+            flex-shrink: 0;
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+        }
+        .builder-panel {
+            flex-grow: 1;
+            background-color: var(--bg-primary);
+            padding: 1.5rem;
+        }
+        .panel-header {
+            padding: 1.125rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+        .panel-content {
+            overflow-y: auto;
+            padding: 1.25rem;
+            flex-grow: 1;
+        }
+        .flow-item, .dialog-item, .sequence-card {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            padding: 0.85rem 1.25rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+        }
+        .flow-item {
+             cursor: grab;
+             justify-content: space-between;
+        }
+        .sequence-card {
+            cursor: pointer;
+        }
+        .flow-item:hover, .dialog-item:hover, .sequence-card:hover {
+            background-color: #4b5563;
+        }
+        html.light .flow-item:hover, html.light .dialog-item:hover, html.light .sequence-card:hover {
+            background-color: #e5e7eb;
+        }
+        .flow-item.used {
+            background-color: var(--bg-primary);
+            color: var(--text-secondary);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .sortable-chosen {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transform: scale(1.02);
+        }
+        .sortable-ghost {
+            background-color: var(--accent-color) !important;
+            opacity: 0.5;
+            border-radius: 0.375rem;
+        }
+        .top-bar {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .modal {
+            background-color: rgba(0, 0, 0, 0.6);
+            transition: opacity var(--transition-speed);
+        }
+        .modal-content {
+             background-color: var(--bg-secondary);
+        }
+        html.light .modal-content {
+            background-color: var(--bg-primary);
+        }
+        html.light .flow-item, html.light .dialog-item, html.light .sequence-card {
+            background-color: var(--bg-tertiary);
+            border-color: var(--border-color);
+        }
+        html.light .library-panel, html.light .builder-panel .panel-content {
+             background-color: var(--bg-secondary);
+        }
+        html.light body, html.light .builder-panel {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        /* --- Theme Toggle CSS --- */
+        #theme:checked ~ .block {
+            background-color: var(--accent-color);
+        }
+        #theme:checked ~ .dot {
+            transform: translateX(1rem);
+        }
+        .block {
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        /* --- Trix Editor Styles --- */
+        trix-toolbar [data-trix-button-group="file-tools"] {
+          display: none;
+        }
+        .dialog-item {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.5rem;
+        }
+        .dialog-item .handle-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+        trix-toolbar .trix-button-group {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-bottom: none;
+            border-radius: 0.375rem 0.375rem 0 0;
+        }
+        trix-toolbar .trix-button {
+            background: transparent;
+        }
+        trix-toolbar .trix-button:hover {
+            background: var(--bg-primary);
+        }
+        trix-toolbar .trix-button.trix-active {
+            background: var(--accent-color);
+        }
+        .trix-content {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color) !important;
+            border-radius: 0 0 0.375rem 0.375rem;
+            padding: 0.75rem;
+            min-height: 100px;
+            color: var(--text-primary);
+        }
+        html.light .trix-content {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+        html.light trix-toolbar .trix-button-group {
+            background-color: var(--bg-tertiary);
+        }
+        
+        /* -- Trix Icon Color Fix -- */
+        trix-toolbar .trix-button--icon::before {
+            color: var(--text-primary);
+        }
+        trix-toolbar .trix-button.trix-active .trix-button--icon::before {
+            color: #ffffff;
+        }
+        html.light trix-toolbar .trix-button.trix-active .trix-button--icon::before {
+            color: var(--text-primary);
+        }
+
+        /* --- Readability & Theming --- */
+        .handle, .dialog-item .handle-bar span, .flow-steps-count, #theme-toggle span, #close-sequencer-window-btn {
+            color: var(--text-secondary);
+        }
+        .flow-name-text, .sequence-card h3 {
+            color: var(--text-primary);
+        }
+        .sequence-card p {
+            color: var(--text-secondary);
+        }
+        .sequence-item-count {
+             color: var(--text-tertiary);
+        }
+        .delete-item-btn {
+            color: var(--text-tertiary);
+            transition: color 0.2s;
+        }
+        .delete-item-btn:hover {
+            color: var(--danger-color);
+        }
+        #theme-toggle span {
+            font-weight: 500;
+        }
+        #close-sequencer-window-btn {
+            transition: color 0.2s;
+        }
+        #close-sequencer-window-btn:hover {
+            color: var(--text-primary);
+        }
+
+        /* --- Layout & Structure --- */
+        .flow-name-text {
+            flex-grow: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+        .flow-steps-count {
+            flex-shrink: 0;
+            margin-left: 0.5rem;
+            font-size: 0.75rem;
+        }
+        .sequence-card h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sequence-card p {
+            font-size: 0.875rem;
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .sequence-item-count {
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+        }
+        #library-list > div + div,
+        #saved-sequences-list > div + div,
+        #builder-list > div + div {
+            margin-top: 0.75rem;
+        }
+
+        /* Fix for input fields in light mode */
+        html.light input[type="text"],
+        html.light textarea,
+        html.light select {
+            color: var(--text-primary);
+            background-color: var(--bg-secondary);
+            border-color: var(--border-color);
+        }
+        html.light .panel-header h2 {
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div>
+            <h1 class="text-xl font-bold">Flow Sequencer v 0.1</h1>
+            <div class="text-xs text-gray-400">Made by Ulysses Villalobos & Gemini✨</div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <label for="theme" id="theme-toggle" class="flex items-center cursor-pointer">
+                <span class="mr-3 text-sm font-medium">Light</span>
+                <div class="relative">
+                    <input type="checkbox" id="theme" class="sr-only">
+                    <div class="block bg-gray-600 w-10 h-6 rounded-full"></div>
+                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out"></div>
+                </div>
+                <span class="ml-3 text-sm font-medium">Dark</span>
+            </label>
+            <button id="toggle-debug-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md text-sm">Debug</button>
+        </div>
+        <button id="close-sequencer-window-btn" class="text-2xl">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+
+    <div class="sequencer-container">
+        <!-- Left Panel: Library -->
+        <aside class="library-panel">
+            <!-- Saved Flows Section -->
+            <div class="flex flex-col h-1/2">
+                <div class="panel-header">
+                    <h2 class="text-lg font-bold">Flow Library</h2>
+                    <input type="text" id="flow-search" placeholder="Search flows..." class="w-full mt-2 p-2 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)]">
+                </div>
+                <div id="library-list" class="panel-content space-y-3">
+                    <!-- Flows will be dynamically added here -->
+                </div>
+            </div>
+            <!-- Saved Sequences Section -->
+            <div class="flex flex-col h-1/2 border-t border-[var(--border-color)]">
+                <div class="panel-header">
+                    <h2 class="text-lg font-bold">Saved Sequences</h2>
+                    <input type="text" id="sequence-search" placeholder="Search sequences..." class="w-full mt-2 p-2 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)]">
+                </div>
+                <div id="saved-sequences-list" class="panel-content space-y-3">
+                    <!-- Saved sequences will be displayed here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Panel: Builder -->
+        <main class="builder-panel">
+            <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                <h2 id="builder-title" class="text-2xl font-bold">New Sequence</h2>
+                <button id="add-dialog-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md flex items-center transition-colors">
+                    <i class="fas fa-plus mr-2"></i> Add Dialog
+                </button>
+            </div>
+            <div id="builder-list" class="panel-content bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] flex-grow space-y-3">
+                <!-- Dragged flows and dialogs will appear here -->
+            </div>
+            <div class="mt-4 flex justify-end space-x-2 flex-shrink-0">
+                 <button id="clear-builder-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                    Clear
+                </button>
+                <button id="save-as-sequence-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                    Save As
+                </button>
+                <button id="save-sequence-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                    Save
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Debug Panel -->
+    <div id="debug-panel" class="fixed bottom-4 right-4 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-2xl w-96 h-auto max-h-[80vh] z-[100] hidden flex-col">
+        <div id="debug-header" class="p-2 border-b border-[var(--border-color)] cursor-move bg-[var(--bg-tertiary)] rounded-t-lg">
+            <h4 class="font-bold text-sm text-center">Debug Console</h4>
+        </div>
+        <div id="debug-content" class="p-3 space-y-2 flex-grow overflow-y-auto">
+            <div class="flex justify-around">
+                <button id="debug-log-appdata" class="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-2 rounded">Log AppData</button>
+                <button id="debug-log-builder" class="text-xs bg-green-600 hover:bg-green-700 text-white font-semibold py-1 px-2 rounded">Log Builder HTML</button>
+                <button id="debug-clear-log" class_="text-xs bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-2 rounded">Clear Log</button>
+            </div>
+            <div id="debug-log" class="mt-2 p-2 bg-[var(--bg-primary)] rounded-sm text-xs font-mono h-64 overflow-y-auto border border-[var(--border-color)]"></div>
+        </div>
+    </div>
+
+    <!-- Save Sequence Modal -->
+    <div id="save-sequence-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center modal">
+        <div class="modal-content rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 class="text-xl font-bold mb-4">Save Sequence</h3>
+            <input type="text" id="sequence-name-input" placeholder="Sequence Name" class="w-full p-2 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] mb-4 focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)]">
+            <textarea id="sequence-desc-input" placeholder="Optional Description" rows="3" class="w-full p-2 rounded bg-[var(--bg-tertiary)] border border-[var(--border-color)] mb-4 focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)]"></textarea>
+            <div class="flex justify-end space-x-4">
+                <button id="cancel-save-sequence-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition-colors">Cancel</button>
+                <button id="confirm-save-sequence-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition-colors">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic Alert/Confirmation Modal -->
+    <div id="alert-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center modal">
+        <div class="modal-content rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 id="alert-modal-title" class="text-xl font-bold mb-4">Confirmation</h3>
+            <p id="alert-modal-message" class="mb-6"></p>
+            <div id="alert-modal-buttons" class="flex justify-end space-x-4">
+                <!-- Buttons are added dynamically -->
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Theme Manager ---
+            const themeToggle = document.querySelector('#theme-toggle input');
+            const applyTheme = (theme, isInitial = false) => {
+                if (theme === 'light') {
+                    document.documentElement.classList.add('light');
+                    if (isInitial) themeToggle.checked = false;
+                } else {
+                    document.documentElement.classList.remove('light');
+                    if (isInitial) themeToggle.checked = true;
+                }
+            };
+            themeToggle.addEventListener('change', (e) => {
+                const newTheme = e.target.checked ? 'dark' : 'light';
+                localStorage.setItem('747FlowTheme', newTheme);
+                applyTheme(newTheme);
+            });
+            applyTheme(localStorage.getItem('747FlowTheme') || 'dark', true);
+
+
+            // --- DOM Elements ---
+            const libraryList = document.getElementById('library-list');
+            const builderList = document.getElementById('builder-list');
+            const flowSearch = document.getElementById('flow-search');
+            const sequenceSearch = document.getElementById('sequence-search');
+            const addDialogBtn = document.getElementById('add-dialog-btn');
+            const saveSequenceBtn = document.getElementById('save-sequence-btn');
+            const saveAsSequenceBtn = document.getElementById('save-as-sequence-btn');
+            const clearBuilderBtn = document.getElementById('clear-builder-btn');
+            const savedSequencesList = document.getElementById('saved-sequences-list');
+            const closeSequencerWindowBtn = document.getElementById('close-sequencer-window-btn');
+            const builderTitle = document.getElementById('builder-title');
+
+            // Modals
+            const saveSequenceModal = document.getElementById('save-sequence-modal');
+            const sequenceNameInput = document.getElementById('sequence-name-input');
+            const sequenceDescInput = document.getElementById('sequence-desc-input');
+            const cancelSaveSequenceBtn = document.getElementById('cancel-save-sequence-btn');
+            const confirmSaveSequenceBtn = document.getElementById('confirm-save-sequence-btn');
+            const alertModal = document.getElementById('alert-modal');
+
+            // --- Debug Panel Elements ---
+            const debugPanel = document.getElementById('debug-panel');
+            const debugHeader = document.getElementById('debug-header');
+            const debugLog = document.getElementById('debug-log');
+            const toggleDebugBtn = document.getElementById('toggle-debug-btn');
+
+            // --- Debug Logger ---
+            function debug(level, ...args) {
+                const now = new Date();
+                const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+                
+                const message = args.map(arg => {
+                    if (typeof arg === 'object' && arg !== null) {
+                        try {
+                            return JSON.stringify(arg, null, 2);
+                        } catch (e) {
+                            return '[Unserializable Object]';
+                        }
+                    } else {
+                        return String(arg);
+                    }
+                }).join(' ');
+
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-${level} border-b border-gray-700 p-1`;
+                logEntry.innerHTML = `<span class="font-bold text-gray-500">[${timestamp}]</span> ${message.replace(/\n/g, '<br>')}`;
+                
+                debugLog.appendChild(logEntry);
+                debugLog.scrollTop = debugLog.scrollHeight; // Auto-scroll
+
+                // Also log to the browser console
+                console[level] || console.log(...args);
+            }
+
+            // --- Communication Channel ---
+            const channel = new BroadcastChannel('flow_trainer_channel');
+
+            channel.addEventListener('message', (event) => {
+                const { type, flows, sequences } = event.data;
+                console.log('[Sequencer]: Received message from trainer:', event.data);
+                if (type === 'initData') {
+                    appData.flows = flows || [];
+                    appData.sequences = sequences || [];
+                    renderLibrary();
+                    renderSavedSequences();
+                }
+            });
+
+            // --- App State (Loaded from localStorage) ---
+            let appData = {
+                flows: [],
+                sequences: [],
+                panels: {},
+                hotspots: [],
+                procedures: []
+            };
+            let currentSequence = null;
+
+            // --- Generic Modal Functions ---
+            function showModal(title, message, buttons) {
+                document.getElementById('alert-modal-title').textContent = title;
+                document.getElementById('alert-modal-message').textContent = message;
+                const buttonContainer = document.getElementById('alert-modal-buttons');
+                buttonContainer.innerHTML = '';
+
+                buttons.forEach(btnInfo => {
+                    const button = document.createElement('button');
+                    button.textContent = btnInfo.text;
+                    button.className = btnInfo.class;
+                    button.addEventListener('click', () => {
+                        alertModal.classList.add('hidden');
+                        if (btnInfo.callback) {
+                            btnInfo.callback();
+                        }
+                    });
+                    buttonContainer.appendChild(button);
+                });
+
+                alertModal.classList.remove('hidden');
+                alertModal.classList.add('flex');
+            }
+
+            
+
+            // --- Core Sequencer Functions ---
+            function initializeSequencerPage() {
+                console.log('[Sequencer]: Initializing page and requesting data from trainer.');
+                channel.postMessage({ type: 'requestData' });
+
+                // Add a listener for receiving the data
+                channel.addEventListener('message', (event) => {
+                    const { type, flows, sequences, panels, hotspots, procedures } = event.data;
+                    if (type === 'initData') {
+                        console.log('[Sequencer]: Received initData from trainer.');
+                        appData.flows = flows || [];
+                        appData.sequences = sequences || [];
+                        appData.panels = panels || {};
+                        appData.hotspots = hotspots || [];
+                        appData.procedures = procedures || [];
+
+                        // Data validation
+                        const allFlowIds = new Set(appData.flows.map(f => f.id));
+                        let sequencesModified = false;
+                        appData.sequences.forEach(seq => {
+                            const originalLength = seq.items.length;
+                            seq.items = seq.items.filter(item => {
+                                if (item.type === 'flow') {
+                                    return allFlowIds.has(item.id);
+                                }
+                                return true;
+                            });
+                            if (seq.items.length < originalLength) {
+                                sequencesModified = true;
+                            }
+                        });
+
+                        if (sequencesModified) {
+                            console.log('[Sequencer]: Cleaned up sequences with references to deleted flows.');
+                            channel.postMessage({ type: 'saveSequences', payload: appData.sequences });
+                        }
+
+                        renderLibrary();
+                        renderSavedSequences();
+                    }
+                }, { once: true }); // Ensure this listener only runs once
+            }
+
+            function renderLibrary() {
+                libraryList.innerHTML = '';
+                const searchTerm = flowSearch.value.toLowerCase();
+                const usedFlowIds = new Set(
+                    [...builderList.querySelectorAll('.flow-item')].map(el => el.dataset.flowId)
+                );
+
+                appData.flows
+                    .filter(flow => flow.name.toLowerCase().includes(searchTerm))
+                    .forEach(flow => {
+                        const item = document.createElement('div');
+                        item.className = 'flow-item p-3 rounded-md';
+                        item.dataset.flowId = flow.id;
+                        // REMOVED hardcoded text color classes (e.g., text-white, text-gray-400)
+                        item.innerHTML = `
+                            <div class="flex justify-between items-center w-full">
+                                <div class="flex items-center min-w-0">
+                                    <i class="fa-solid fa-bars handle cursor-grab mr-2"></i>
+                                    <span class="flow-name-text font-medium">${flow.name}</span>
+                                </div>
+                                <span class="flow-steps-count text-xs">${(flow.steps || []).length} steps</span>
+                            </div>
+                        `;
+                        
+                        if (usedFlowIds.has(flow.id)) {
+                            item.classList.add('used');
+                        }
+                        
+                        libraryList.appendChild(item);
+                    });
+            }
+
+            function renderSavedSequences() {
+                savedSequencesList.innerHTML = '';
+                const searchTerm = sequenceSearch.value.toLowerCase();
+                appData.sequences
+                    .filter(seq => seq.name.toLowerCase().includes(searchTerm))
+                    .forEach(sequence => {
+                        const card = createSequenceCard(sequence);
+                        savedSequencesList.appendChild(card);
+                    });
+            }
+            
+            function createSequenceCard(sequence) {
+                const card = document.createElement('div');
+                card.className = 'sequence-card p-3 rounded-lg relative';
+                card.dataset.sequenceId = sequence.id;
+                // REMOVED hardcoded color classes and use specific class for item count
+                card.innerHTML = `
+                    <div class="flex-grow pr-8">
+                        <h3 class="font-bold">${sequence.name}</h3>
+                        <p class="text-sm">${sequence.description || 'No description'}</p>
+                        <p class="sequence-item-count">${sequence.items.length} items</p>
+                    </div>
+                    <div class="absolute top-2 right-2 flex space-x-2">
+                        <button class="play-sequence-btn text-green-400 hover:text-green-300 transition-colors">
+                            <i class="fa-solid fa-play"></i>
+                        </button>
+                        <button class="delete-sequence-btn text-red-400 hover:text-red-300 transition-colors">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+
+                card.querySelector('.play-sequence-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    playSequence(sequence.id);
+                });
+
+                card.querySelector('.delete-sequence-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteSequence(sequence.id);
+                });
+                return card;
+            }
+
+            function addDialog() {
+                const item = createBuilderDialogItem();
+                builderList.appendChild(item);
+                item.querySelector('trix-editor').focus();
+            }
+
+            function createBuilderDialogItem() {
+                const dialogId = `dialog_${Date.now()}`;
+                const editorId = `editor_${dialogId}`;
+                const item = document.createElement('div');
+                item.className = 'dialog-item p-2 rounded-md';
+                item.dataset.dialogId = dialogId;
+                // REMOVED hardcoded text color classes
+                item.innerHTML = `
+                    <div class="handle-bar">
+                        <i class="fa-solid fa-bars handle cursor-grab"></i>
+                        <span class="flex-grow text-sm font-medium ml-2">Dialog</span>
+                        <button class="delete-item-btn transition-colors"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    <div>
+                        <input id="${editorId}" type="hidden" name="content">
+                        <trix-editor input="${editorId}" class="trix-content" placeholder="Enter your rich text..."></trix-editor>
+                    </div>
+                `;
+                return item;
+            }
+
+            function createBuilderFlowItem(flowId, flowName) {
+                const item = document.createElement('div');
+                item.className = 'flow-item p-2 rounded-md';
+                item.dataset.flowId = flowId;
+                // REMOVED hardcoded text color classes
+                item.innerHTML = `
+                    <div class="flex justify-between items-center w-full">
+                        <div class="flex items-center min-w-0">
+                            <i class="fa-solid fa-bars handle cursor-grab mr-2"></i>
+                            <span class="flow-name-text font-medium">${flowName}</span>
+                        </div>
+                        <button class="delete-item-btn ml-2 transition-colors"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+                return item;
+            }
+            
+            function loadSequence(sequenceId) {
+                debug('info', `Attempting to load sequence with ID: ${sequenceId}`);
+                const sequenceToLoad = appData.sequences.find(s => s.id === sequenceId);
+                if (!sequenceToLoad) {
+                    debug('error', `Sequence with ID ${sequenceId} not found in appData.`);
+                    return;
+                }
+                debug('info', 'Found sequence to load:', sequenceToLoad);
+
+                const doLoad = () => {
+                    debug('info', 'Executing doLoad().');
+                    builderList.innerHTML = '';
+                    currentSequence = sequenceToLoad;
+                    builderTitle.textContent = currentSequence.name;
+                    debug('info', `Set currentSequence to:`, currentSequence);
+
+                    sequenceToLoad.items.forEach(item => {
+                        let element;
+                        if (item.type === 'flow') {
+                            element = createBuilderFlowItem(item.id, item.name);
+                            builderList.appendChild(element);
+                            debug('log', 'Loaded flow item:', item);
+                        } else if (item.type === 'dialogue' || item.type === 'dialog') {
+                            element = createBuilderDialogItem();
+                            builderList.appendChild(element);
+                            debug('log', 'Loading dialogue item:', item);
+                            // Use a small delay to ensure the trix-editor element is fully initialized
+                            setTimeout(() => {
+                                const editor = element.querySelector('trix-editor');
+                                if (editor && editor.editor) {
+                                    debug('log', `Trix editor for ${item.type} is ready. Loading HTML:`, item.text);
+                                    editor.editor.loadHTML(item.text);
+                                } else {
+                                    debug('warn', `Trix editor not ready for ${item.type} after 10ms. Content may not load.`);
+                                }
+                            }, 100);
+                        }
+                    });
+                    renderLibrary();
+                    debug('info', 'Finished loading sequence into builder.');
+                };
+
+                if (builderList.children.length > 0) {
+                     showModal('Unsaved Changes', 'Loading a sequence will replace the current items in the builder. Are you sure?', [
+                        { text: 'Cancel', class: 'bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition-colors' },
+                        { text: 'Load Sequence', class: 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors', callback: doLoad }
+                    ]);
+                } else {
+                    doLoad();
+                }
+            }
+            
+            function deleteSequence(sequenceId) {
+                 showModal('Delete Sequence', 'Are you sure you want to permanently delete this sequence?', [
+                    { text: 'Cancel', class: 'bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition-colors' },
+                    { text: 'Delete', class: 'bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition-colors', callback: () => {
+                        appData.sequences = appData.sequences.filter(s => s.id !== sequenceId);
+                        channel.postMessage({ type: 'saveSequences', payload: appData.sequences });
+                        renderSavedSequences();
+                    }}
+                ]);
+            }
+
+            function openSaveSequenceModal(isSaveAs = false) {
+                if (builderList.children.length === 0) {
+                     showModal('Empty Sequence', 'Cannot save an empty sequence. Add some items from the library or create a dialog.', [
+                        { text: 'OK', class: 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors' }
+                    ]);
+                    return;
+                }
+
+                if (isSaveAs || !currentSequence) {
+                    sequenceNameInput.value = '';
+                    sequenceDescInput.value = '';
+                    saveSequenceModal.classList.remove('hidden');
+                    saveSequenceModal.classList.add('flex');
+                    sequenceNameInput.focus();
+                } else {
+                    showModal('Overwrite Confirmation', `Are you sure you want to overwrite "${currentSequence.name}"?`, [
+                        { text: 'Cancel', class: 'bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition-colors' },
+                        { text: 'Overwrite', class: 'bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition-colors', callback: () => confirmSaveSequence(false) }
+                    ]);
+                }
+            }
+
+            function closeSaveSequenceModal() {
+                saveSequenceModal.classList.add('hidden');
+                saveSequenceModal.classList.remove('flex');
+                sequenceNameInput.value = '';
+                sequenceDescInput.value = '';
+            }
+
+            function confirmSaveSequence(isSaveAs = true) {
+                console.log('[Save] "Confirm Save" button clicked.');
+                const sequenceName = sequenceNameInput.value.trim();
+                if (isSaveAs && !sequenceName) {
+                    console.error('[Save] Sequence name is empty. Aborting.');
+                    sequenceNameInput.focus();
+                    sequenceNameInput.classList.add('ring-2', 'ring-red-500');
+                    setTimeout(() => sequenceNameInput.classList.remove('ring-2', 'ring-red-500'), 2000);
+                    return;
+                }
+                console.log(`[Save] Sequence name: "${sequenceName}"`);
+
+                try {
+                    const sequenceItems = [...builderList.children].map(item => {
+                        if (item.classList.contains('flow-item')) {
+                            const flowData = { type: 'flow', id: item.dataset.flowId, name: item.querySelector('.flow-name-text').textContent };
+                            console.log('[Save] Mapping flow item:', flowData);
+                            return flowData;
+                        } else if (item.classList.contains('dialog-item')) {
+                            const trixEditor = item.querySelector('trix-editor');
+                            if (trixEditor && trixEditor.editor) {
+                                const dialogueData = { type: 'dialogue', text: trixEditor.value };
+                                console.log('[Save] Mapping dialogue item:', dialogueData);
+                                return dialogueData;
+                            } else {
+                                console.warn('[Save] Found dialogue item but Trix editor is not ready. Saving with empty text.');
+                                return { type: 'dialogue', text: '' };
+                            }
+                        }
+                        return null; // Should not happen
+                    }).filter(Boolean);
+
+                    console.log('[Save] Mapped sequence items:', JSON.parse(JSON.stringify(sequenceItems)));
+
+                    if (isSaveAs) {
+                        const newSequence = {
+                            id: `seq_${Date.now()}`,
+                            name: sequenceName,
+                            description: sequenceDescInput.value.trim(),
+                            items: sequenceItems
+                        };
+                        console.log('[Save] Created new sequence object:', JSON.parse(JSON.stringify(newSequence)));
+
+                        appData.sequences.push(newSequence);
+                        currentSequence = newSequence;
+                        builderTitle.textContent = currentSequence.name;
+                    } else {
+                        currentSequence.name = sequenceNameInput.value.trim() || currentSequence.name;
+                        currentSequence.description = sequenceDescInput.value.trim();
+                        currentSequence.items = sequenceItems;
+                    }
+
+                    console.log('[Save] Pushed new sequence to appData. Total sequences:', appData.sequences.length);
+                    
+                    console.log('[Save] Posting message to main window...');
+                    channel.postMessage({ type: 'saveSequences', payload: appData.sequences });
+                    console.log('[Save] Message posted.');
+
+                    closeSaveSequenceModal();
+                    renderSavedSequences();
+                    console.log('[Save] UI cleared and updated. Save process complete.');
+                } catch (error) {
+                    console.error('[Save] An unexpected error occurred during the save process:', error);
+                    showModal('Save Error', 'An unexpected error occurred. Please check the console (F12) for details.', [{ text: 'OK', class: 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors'}]);
+                }
+            }
+            
+            function clearBuilder() {
+                if (builderList.children.length > 0) {
+                    showModal('Clear Builder', 'Are you sure you want to remove all items from the builder?', [
+                        { text: 'Cancel', class: 'bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition-colors' },
+                        { text: 'Clear', class: 'bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition-colors', callback: () => {
+                            builderList.innerHTML = '';
+                            currentSequence = null;
+                            builderTitle.textContent = 'New Sequence';
+                            renderLibrary();
+                        }}
+                    ]);
+                }
+            }
+
+            function playSequence(sequenceId) {
+                const sequence = appData.sequences.find(s => s.id === sequenceId);
+                if (!sequence) {
+                    showModal('Error', 'Could not find the sequence to play.', [{ text: 'OK', class: 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md'}]);
+                    return;
+                }
+
+                if (sequence.items.length === 0) {
+                    showModal('Empty Sequence', 'This sequence has no items to play.', [{ text: 'OK', class: 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md'}]);
+                    return;
+                }
+
+                // 1. Get the latest data from localStorage.
+                const currentAppDataString = localStorage.getItem('747FlowData');
+                if (!currentAppDataString) {
+                    showModal('Error', 'Could not find the main application data. Is the trainer window open?');
+                    return;
+                }
+                const currentAppData = JSON.parse(currentAppDataString);
+
+                // 2. Add the pending action to the data object.
+                currentAppData.pendingAction = {
+                    type: 'START_SEQUENCE',
+                    sequenceId: sequence.id 
+                };
+
+                // 3. Save the modified data back to localStorage. This is one atomic update.
+                localStorage.setItem('747FlowData', JSON.stringify(currentAppData));
+
+                // 4. Focus the other window to trigger the action and show confirmation
+                if (window.opener) {
+                    window.opener.focus();
+                }
+                showModal('Training Initiated', `Training for "${sequence.name}" will begin. Please switch to the main trainer window if it did not appear.`, [
+                    { text: 'OK', class: 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-colors' }
+                ]);
+            }
+
+            // --- Event Listeners ---
+            flowSearch.addEventListener('input', renderLibrary);
+            sequenceSearch.addEventListener('input', renderSavedSequences);
+            addDialogBtn.addEventListener('click', addDialog);
+            saveSequenceBtn.addEventListener('click', () => openSaveSequenceModal(false));
+            saveAsSequenceBtn.addEventListener('click', () => openSaveSequenceModal(true));
+            clearBuilderBtn.addEventListener('click', clearBuilder);
+            cancelSaveSequenceBtn.addEventListener('click', closeSaveSequenceModal);
+            confirmSaveSequenceBtn.addEventListener('click', () => confirmSaveSequence(true));
+            
+            closeSequencerWindowBtn.addEventListener('click', () => {
+                window.close();
+            });
+
+            builderList.addEventListener('click', (e) => {
+                const targetButton = e.target.closest('.delete-item-btn');
+                if (targetButton) {
+                    targetButton.closest('.dialog-item, .flow-item').remove();
+                    renderLibrary();
+                }
+            });
+
+            savedSequencesList.addEventListener('click', (e) => {
+                const card = e.target.closest('.sequence-card');
+                if (!card) return;
+
+                const isButtonClick = e.target.closest('button');
+                if (!isButtonClick) {
+                    loadSequence(card.dataset.sequenceId);
+                }
+            });
+
+            // --- Debug Panel Logic ---
+            toggleDebugBtn.addEventListener('click', () => {
+                debugPanel.classList.toggle('hidden');
+                debugPanel.classList.toggle('flex');
+            });
+
+            document.getElementById('debug-log-appdata').addEventListener('click', () => {
+                debug('info', 'Current AppData:', appData);
+            });
+
+            document.getElementById('debug-log-builder').addEventListener('click', () => {
+                debug('info', 'Builder List HTML:', builderList.innerHTML);
+            });
+
+            document.getElementById('debug-clear-log').addEventListener('click', () => {
+                debugLog.innerHTML = '';
+            });
+
+            // Make debug panel draggable
+            let isDraggingDebug = false;
+            let debugOffsetX, debugOffsetY;
+
+            debugHeader.addEventListener('mousedown', (e) => {
+                isDraggingDebug = true;
+                const rect = debugPanel.getBoundingClientRect();
+                debugOffsetX = e.clientX - rect.left;
+                debugOffsetY = e.clientY - rect.top;
+                document.addEventListener('mousemove', onDebugDrag);
+                document.addEventListener('mouseup', onDebugDragEnd);
+            });
+
+            function onDebugDrag(e) {
+                if (!isDraggingDebug) return;
+                let newX = e.clientX - debugOffsetX;
+                let newY = e.clientY - debugOffsetY;
+
+                // Constrain to viewport
+                const vw = document.documentElement.clientWidth;
+                const vh = document.documentElement.clientHeight;
+                const panelWidth = debugPanel.offsetWidth;
+                const panelHeight = debugPanel.offsetHeight;
+
+                newX = Math.max(0, Math.min(newX, vw - panelWidth));
+                newY = Math.max(0, Math.min(newY, vh - panelHeight));
+
+                debugPanel.style.left = `${newX}px`;
+                debugPanel.style.top = `${newY}px`;
+                debugPanel.style.bottom = 'auto';
+                debugPanel.style.right = 'auto';
+            }
+
+            function onDebugDragEnd() {
+                isDraggingDebug = false;
+                document.removeEventListener('mousemove', onDebugDrag);
+                document.removeEventListener('mouseup', onDebugDragEnd);
+            }
+
+            // --- Drag and Drop (SortableJS) ---
+            new Sortable(libraryList, {
+                group: { name: 'sequencer', pull: 'clone', put: false },
+                animation: 150,
+                sort: false,
+                handle: '.handle',
+                filter: '.used',
+                onMove: function(evt) {
+                    return !evt.related.classList.contains('used');
+                },
+                onEnd: (evt) => {}
+            });
+
+            new Sortable(builderList, {
+                group: 'sequencer',
+                animation: 150,
+                handle: '.handle',
+                ghostClass: 'sortable-ghost',
+                onAdd: function (evt) {
+                    const itemEl = evt.item;
+                    if (itemEl.classList.contains('flow-item')) {
+                        const flowId = itemEl.dataset.flowId;
+                        const flow = appData.flows.find(f => f.id === flowId);
+                        if(flow){
+                            const newEl = createBuilderFlowItem(flow.id, flow.name);
+                            itemEl.parentNode.replaceChild(newEl, itemEl);
+                        }
+                    }
+                    renderLibrary();
+                },
+                onEnd: () => {
+                    renderLibrary();
+                }
+            });
+
+            // --- Paste Formatting Enhancement ---
+            document.addEventListener('trix-initialize', (event) => {
+                const element = event.target;
+                element.addEventListener('paste', (e) => {
+                    e.preventDefault();
+                    const pastedHtml = e.clipboardData.getData('text/html');
+                    if (pastedHtml) {
+                        const editor = element.editor;
+                        const sanitizedHtml = DOMPurify.sanitize(pastedHtml, {USE_PROFILES: {html: true}});
+                        editor.insertHTML(sanitizedHtml);
+                    } else {
+                        const pastedText = e.clipboardData.getData('text/plain');
+                        editor.insertString(pastedText);
+                    }
+                });
+            });
+
+
+            // --- Initial Render ---
+            initializeSequencerPage();
+        });
+    </script>
+</body>
+</html>
