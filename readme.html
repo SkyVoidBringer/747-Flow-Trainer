@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instructions - 747 Flow Trainer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .prose {
+            color: #d1d5db; /* Default text color for dark mode */
+        }
+        .prose h1, .prose h2, .prose h3 {
+            color: #ffffff;
+        }
+        .prose a {
+            color: #60a5fa;
+        }
+        .prose strong {
+            color: #f9fafb;
+        }
+        .prose code {
+            color: #fca5a5;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 0.2em 0.4em;
+            border-radius: 0.25rem;
+        }
+        .prose ul > li::before {
+            background-color: #6b7281;
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+    <div class="container mx-auto max-w-4xl px-4 py-12">
+        <header class="mb-12">
+            <a href="index.html" class="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors">
+                <i class="fa-solid fa-arrow-left mr-2"></i>
+                Back to Home
+            </a>
+        </header>
+
+        <main class="prose prose-lg max-w-none">
+            <h1>Cockpit Flow Trainer</h1>
+            <p>The Cockpit Flow Trainer is a web-based application designed for pilots and aviation enthusiasts to create, practice, and master aircraft procedures and checklists. It provides a highly interactive and customizable environment to build visual representations of a cockpit, define flows, and train on them in a guided or practice mode.</p>
+            <p>The application is composed of two main parts: the <strong>Trainer</strong> and the <strong>Sequencer</strong>.</p>
+            <ul>
+                <li><code>CockpitFlowTrainer.html</code>: The main interface where you create panels, upload cockpit images, define interactive "hotspots" for every button and switch, and build simple flows.</li>
+                <li><code>FlowSequencer.html</code>: A companion tool that opens in a new window, allowing you to chain multiple flows and custom dialogue boxes together to create complex, multi-part sequences (e.g., a full "Before Takeoff" procedure).</li>
+            </ul>
+
+            <h2>Key Features</h2>
+            <ul>
+                <li><strong>Visual Cockpit Builder</strong>: Upload images of any cockpit panel and define its layout.</li>
+                <li><strong>Interactive Hotspots</strong>: Create clickable areas on your cockpit images for every switch, button, and lever.</li>
+                <li><strong>Intuitive Flow Creation</strong>: Link hotspots together in a specific order to create a procedural flow.</li>
+                <li><strong>Advanced Sequence Builder</strong>: Use the pop-out Sequencer to arrange multiple flows and add rich-text dialogue or instruction cards.</li>
+                <li><strong>Practice & Training Modes</strong>:
+                    <ul>
+                        <li><strong>Practice Mode</strong>: Guides you step-by-step through a flow, highlighting the next correct hotspot.</li>
+                        <li><strong>Test Mode (Implicit)</strong>: Simply click the hotspots in order without guidance to test your memory.</li>
+                    </ul>
+                </li>
+                <li><strong>AI-Assisted Setup</strong>: Paste a written checklist, and the app uses the Gemini AI to automatically parse it and guide you through creating the corresponding hotspots.</li>
+                <li><strong>Full Data Portability</strong>: All your data is saved in the browser's <code>localStorage</code>. You can easily import and export your entire setup as a single <code>.json</code> file to move it between computers or share it.</li>
+                <li><strong>Customizable UI</strong>: Features both Light and Dark themes for user comfort.</li>
+            </ul>
+
+            <h2>How to Use</h2>
+            <h3>1. Initial Configuration</h3>
+            <ol>
+                <li>Launch the <strong>Cockpit Trainer</strong> from the main page.</li>
+                <li><strong>Add a Panel</strong>: In the "Panels" section on the left, give your first panel a name (e.g., "Overhead Panel") and click "Add".</li>
+                <li><strong>Upload an Image</strong>: With the new panel selected, drag and drop a corresponding image of that cockpit panel onto the main area on the right.</li>
+                <li><strong>Enable Edit Mode</strong>: At the top of the left column, toggle the switch from "Practice" to "Edit".</li>
+                <li><strong>Create Hotspots</strong>: Click and drag on the cockpit image to create a new hotspot. Give it a name when prompted. You can move and resize hotspots as needed.</li>
+                <li><strong>Create a Flow</strong>: In the "Flows" section, give a new flow a name (e.g., "APU Start") and click "Add".</li>
+                <li><strong>Add Steps to the Flow</strong>: Expand the new flow you created. Use the dropdown menu to select hotspots from the current panel and add them as steps to the flow.</li>
+            </ol>
+
+            <h3>2. Training</h3>
+            <ol>
+                <li>Toggle the main switch back to "Practice" mode.</li>
+                <li>Select the flow or sequence you wish to practice from the dropdown menu.</li>
+                <li>Click "Start Training".</li>
+                <li>Follow the on-screen prompts to complete the procedure.</li>
+            </ol>
+
+            <h3>3. Using the AI Feature</h3>
+            <ol>
+                <li>Go to <strong>Settings</strong> (gear icon).</li>
+                <li>Enter your <strong>Gemini API Key</strong>. You can get one from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>. The key is saved only in your browser.</li>
+                <li>Paste a written checklist into the "AI-Assisted Setup" text box.</li>
+                <li>Click "Start AI Setup". The application will guide you to click on each control to automatically create the named hotspots for that checklist.</li>
+            </ol>
+        </main>
+
+        <footer class="mt-16 pt-8 border-t border-gray-800 text-center text-gray-500">
+             <p>&copy; 2024 SkyVoidBringer. All Rights Reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
